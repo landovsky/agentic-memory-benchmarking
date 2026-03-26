@@ -31,15 +31,18 @@ MCP server = the stock `zepai/knowledge-graph-mcp` Docker image, zero custom cod
 
 ## Infrastructure
 
-Three services only (vs. six previously):
+Four services (vs. six previously — Mem0, Cognee, and Qdrant are gone):
 
 | Service | Port | Role |
 |---------|------|------|
 | Neo4j 5 | 7474 / 7687 | Graphiti graph DB |
 | Graphiti MCP | 8050 | Standard MCP server |
+| LiteLLM proxy | 4000 | OpenAI-compatible gateway → Gemini via GCP ADC |
 | PostgreSQL | 5432 | Eval results storage |
 
-No LiteLLM proxy — use Anthropic + Gemini SDKs directly in the TypeScript packages (avoids the `/v1/responses` monkey-patch problem entirely).
+**LiteLLM proxy is kept** for Graphiti's internal LLM calls (entity extraction, embeddings). Graphiti's MCP container requires an OpenAI-compatible endpoint; LiteLLM handles that and transparently authenticates to Gemini/Vertex AI using `GOOGLE_APPLICATION_CREDENTIALS_JSON` (a mounted service-account JSON string — no plain API key needed).
+
+The TypeScript packages (`ingest`, `eval`) use the Anthropic SDK directly for scoring — no LiteLLM involved there.
 
 ---
 
@@ -60,6 +63,7 @@ Graphiti extracts entities automatically from episode text using these type hint
 | `Person` | name, role | Developer, colleague, stakeholder |
 | `Concept` | name, definition, domain | Project-specific vocabulary and domain terms |
 | `Configuration` | key, value, scope, is_secret | Settings, flags, conventions |
+| `Other` | name, summary | Catch-all for entities that don't fit the above types |
 
 **Key relationships:**
 ```
@@ -107,6 +111,12 @@ Session data shape:
    - `reference_time`: first message timestamp
    - `group_id`: project_hash (natural isolation per project)
 3. **Progress** — tracks processed session IDs in a local state file to support resume on failure
+4. **Logging** — after each episode is added, queries Graphiti for the entities and relationships that were extracted from it and logs them to stdout in a structured format:
+   ```
+   [session abc123] extracted 7 entities: Project("hotdesk"), File("src/api.ts"), Decision("use PostgreSQL"), ...
+   [session abc123] extracted 4 edges: File -PART_OF-> Project, Decision -AFFECTS-> File, ...
+   ```
+   This makes it easy to verify extraction quality during development without opening Neo4j Browser.
 
 **CLI:**
 ```bash
@@ -243,6 +253,24 @@ Two sections:
 - `db.ts` — PostgreSQL client (init schema, `saveResult()`, `queryForReport()`)
 - `graphiti-client.ts` — typed wrapper around Graphiti MCP HTTP API (`addEpisode()`, `search()`)
 - `scorers.ts` — `exactContains()`, `llmJudge()`, `llmJudgeNegation()`
+
+---
+
+## Environment & Configuration
+
+All service locations are configured via environment variables (`.env` file at repo root), with sensible localhost defaults for local development:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `NEO4J_URI` | `bolt://localhost:7687` | Neo4j Bolt URL |
+| `NEO4J_USER` | `neo4j` | Neo4j username |
+| `NEO4J_PASSWORD` | _(required)_ | Neo4j password |
+| `POSTGRES_URL` | `postgres://localhost:5432/eval` | PostgreSQL connection string |
+| `GRAPHITI_MCP_URL` | `http://localhost:8050` | Graphiti MCP HTTP endpoint |
+| `ANTHROPIC_API_KEY` | _(required)_ | For scoring LLM calls |
+| `GOOGLE_APPLICATION_CREDENTIALS_JSON` | _(required)_ | GCP service account JSON (for LiteLLM → Gemini) |
+
+The `infra/docker-compose.yml` sets these to the in-Docker service hostnames; running the TS packages against a remote or cloud-hosted stack is a matter of changing the env vars only.
 
 ---
 
