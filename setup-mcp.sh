@@ -17,10 +17,10 @@ fi
 echo "Configuring MCP servers for host: $HOST_IP"
 
 # Add MCP servers via claude CLI
-claude mcp add --transport sse mem0 "http://${HOST_IP}:8080/sse" && echo "✓ mem0 configured" || echo "✗ mem0 failed (is claude CLI installed?)"
+claude mcp add --transport sse mem0 "http://${HOST_IP}:8181/sse" && echo "✓ mem0 configured" || echo "✗ mem0 failed (is claude CLI installed?)"
 claude mcp add --transport sse graphiti "http://${HOST_IP}:8050/sse" && echo "✓ graphiti configured" || echo "✗ graphiti failed"
 claude mcp add --transport sse cognee "http://${HOST_IP}:8000/mcp/sse" && echo "✓ cognee configured" || echo "✗ cognee failed"
 
 echo ""
-echo "Done! Test with: curl http://${HOST_IP}:8080/health"
+echo "Done! Test with: curl http://${HOST_IP}:8181/health"
 echo "Verify MCPs: claude mcp list"

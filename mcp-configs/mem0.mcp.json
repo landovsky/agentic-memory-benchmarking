@@ -2,7 +2,7 @@
   "mcpServers": {
     "mem0": {
       "transport": "sse",
-      "url": "http://HOST_IP:8080/sse"
+      "url": "http://HOST_IP:8181/sse"
     }
   }
 }

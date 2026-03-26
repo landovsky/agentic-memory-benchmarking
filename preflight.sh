@@ -6,8 +6,6 @@
 #   bash preflight.sh              # check localhost
 #   bash preflight.sh 192.168.1.X  # check a remote host
 
-set -e
-
 HOST="${1:-localhost}"
 PASS=0
 FAIL=0
@@ -17,10 +15,10 @@ check() {
   local cmd="$2"
   if eval "$cmd" &>/dev/null; then
     echo "  [OK]  $name"
-    ((PASS++))
+    PASS=$((PASS+1))
   else
     echo "  [FAIL] $name"
-    ((FAIL++))
+    FAIL=$((FAIL+1))
   fi
 }
 
@@ -30,7 +28,7 @@ echo ""
 check "PostgreSQL (healthy)"  "docker compose ps postgres | grep -q healthy"
 check "Qdrant"                "curl -sf http://${HOST}:6333/healthz"
 check "Neo4j HTTP"            "curl -sf http://${HOST}:7474"
-check "Mem0 MCP"              "curl -sf http://${HOST}:8080/ || curl -sf http://${HOST}:8080/health"
+check "Mem0 MCP"              "curl -sf http://${HOST}:8181/docs"
 check "Graphiti MCP"          "curl -sf http://${HOST}:8050/ || curl -sf http://${HOST}:8050/health"
 check "Cognee MCP"            "curl -sf http://${HOST}:8000/ || curl -sf http://${HOST}:8000/health"
 check "File server"           "curl -sf http://${HOST}:9000/test-cases/test_cases.csv | head -1 | grep -q 'id'"
