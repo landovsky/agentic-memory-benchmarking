@@ -23,6 +23,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent / ".env")
 
 EPISODE_SLEEP = 0.2
+MAX_CONTENT_CHARS = 4000
 
 
 def _patch_openai_client_for_litellm():
@@ -31,8 +32,25 @@ def _patch_openai_client_for_litellm():
     LiteLLM proxy does not support the OpenAI Responses API (/v1/responses).
     Graphiti v0.28 uses responses.parse for structured completions. This patch
     redirects structured completions to chat.completions with JSON mode.
+
+    The _WrappedResponse bridges the gap between chat.completions response format
+    and the Responses API format that _handle_structured_response expects:
+    - output_text: from choices[0].message.content
+    - usage.input_tokens / output_tokens: mapped from prompt_tokens / completion_tokens
     """
     from graphiti_core.llm_client.openai_client import OpenAIClient
+
+    class _UsageAdapter:
+        """Adapt chat.completions usage (prompt_tokens) to responses API (input_tokens)."""
+        def __init__(self, usage):
+            self.input_tokens = getattr(usage, "prompt_tokens", 0) or 0
+            self.output_tokens = getattr(usage, "completion_tokens", 0) or 0
+
+    class _WrappedResponse:
+        def __init__(self, chat_response):
+            content = chat_response.choices[0].message.content if chat_response.choices else None
+            self.output_text = content or "{}"
+            self.usage = _UsageAdapter(chat_response.usage) if chat_response.usage else None
 
     async def _create_structured_completion(
         self, model, messages, temperature, max_tokens, response_model, **kwargs
@@ -62,11 +80,6 @@ def _patch_openai_client_for_litellm():
             response_format={"type": "json_object"},
         )
 
-        class _WrappedResponse:
-            def __init__(self, chat_response):
-                self.output_text = chat_response.choices[0].message.content
-                self.usage = chat_response.usage
-
         return _WrappedResponse(response)
 
     OpenAIClient._create_structured_completion = _create_structured_completion
@@ -82,23 +95,38 @@ def parse_timestamp(ts: str | None) -> datetime:
     return datetime.now(timezone.utc)
 
 
-def flatten_messages(sessions: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Flatten sessions into a list of messages, each tagged with session_id."""
-    messages: list[dict[str, Any]] = []
+def build_session_episodes(sessions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Build one episode per session by joining all messages into a conversation."""
+    episodes: list[dict[str, Any]] = []
     for session in sessions:
         session_id = session.get("session_id", "unknown")
-        for msg in session.get("messages", []):
-            messages.append({
-                "role": msg.get("role", "user"),
-                "content": msg.get("content", ""),
-                "timestamp": msg.get("timestamp"),
-                "session_id": session_id,
-            })
-    return messages
+        msgs = session.get("messages", [])
+        if not msgs:
+            continue
+
+        lines: list[str] = []
+        for msg in msgs:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if len(content) > MAX_CONTENT_CHARS:
+                content = content[:MAX_CONTENT_CHARS] + "\n[truncated]"
+            lines.append(f"{role}: {content}")
+
+        episode_body = "\n\n".join(lines)
+        # Use earliest message timestamp as reference_time
+        first_ts = msgs[0].get("timestamp")
+
+        episodes.append({
+            "session_id": session_id,
+            "episode_body": episode_body,
+            "timestamp": first_ts,
+            "message_count": len(msgs),
+        })
+    return episodes
 
 
-async def load_messages(
-    messages: list[dict[str, Any]],
+async def load_episodes(
+    episodes: list[dict[str, Any]],
     group_id: str,
     neo4j_host: str,
     neo4j_password: str,
@@ -106,15 +134,16 @@ async def load_messages(
     dry_run: bool,
 ) -> tuple[int, int]:
     if dry_run:
-        print(f"\n[DRY RUN] Would send {len(messages)} message(s) to Graphiti")
+        print(f"\n[DRY RUN] Would send {len(episodes)} session episode(s) to Graphiti")
         print(f"  Neo4j host : bolt://{neo4j_host}:7687")
         print(f"  LiteLLM    : {litellm_url}")
         print(f"  group_id   : {group_id}")
-        for i, msg in enumerate(messages, start=1):
-            role = msg["role"]
-            ts = msg.get("timestamp", "now")
-            sid = msg["session_id"][:8]
-            print(f"  [{i:3d}] session:{sid} | {role:9s} | {ts} | {msg['content'][:60]}")
+        for i, ep in enumerate(episodes, start=1):
+            sid = ep["session_id"][:8]
+            ts = ep.get("timestamp", "now")
+            n = ep["message_count"]
+            body_preview = ep["episode_body"][:80].replace("\n", " ")
+            print(f"  [{i:3d}] session:{sid} | {n:3d} msgs | {ts} | {body_preview}")
         return 0, 0
 
     try:
@@ -171,30 +200,31 @@ async def load_messages(
     successes = 0
     failures = 0
 
-    for i, msg in enumerate(messages, start=1):
-        role = msg["role"]
-        content = msg["content"]
-        ts = parse_timestamp(msg.get("timestamp"))
-        sid = msg["session_id"][:8]
+    for i, ep in enumerate(episodes, start=1):
+        sid = ep["session_id"][:8]
+        ts = parse_timestamp(ep.get("timestamp"))
+        n = ep["message_count"]
+        body_preview = ep["episode_body"][:60].replace("\n", " ")
 
-        episode_name = f"msg_{i:04d}_{role}"
-        print(f"[{i:3d}/{len(messages)}] session:{sid} | {role:9s} | {content[:60]}")
+        episode_name = f"session_{i:04d}_{sid}"
+        print(f"[{i:3d}/{len(episodes)}] session:{sid} | {n:3d} msgs | {body_preview}")
 
         try:
             await graphiti.add_episode(
                 name=episode_name,
-                episode_body=f"{role}: {content}",
+                episode_body=ep["episode_body"],
                 source=EpisodeType.message,
-                source_description=f"{role} message from session {msg['session_id']}",
+                source_description=f"Conversation session {ep['session_id']} ({n} messages)",
                 reference_time=ts,
                 group_id=group_id,
             )
             successes += 1
+            print(f"  OK ({successes} done, {failures} failed)")
         except Exception as exc:
             print(f"  ERROR: {exc}", file=sys.stderr)
             failures += 1
 
-        if i < len(messages):
+        if i < len(episodes):
             await asyncio.sleep(EPISODE_SLEEP)
 
     await graphiti.close()
@@ -239,12 +269,13 @@ def main() -> None:
     sessions: list[dict[str, Any]] = json.loads(
         args.sessions.read_text(encoding="utf-8")
     )
-    messages = flatten_messages(sessions)
-    print(f"Loaded {len(sessions)} session(s), {len(messages)} message(s) from {args.sessions}")
+    episodes = build_session_episodes(sessions)
+    total_msgs = sum(ep["message_count"] for ep in episodes)
+    print(f"Loaded {len(sessions)} session(s), {total_msgs} message(s) → {len(episodes)} episode(s)")
 
     successes, failures = asyncio.run(
-        load_messages(
-            messages=messages,
+        load_episodes(
+            episodes=episodes,
             group_id=args.group_id,
             neo4j_host=neo4j_host,
             neo4j_password=neo4j_password,

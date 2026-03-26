@@ -7,29 +7,14 @@
 
 # ── MEMORIES ────────────────────────────────────────────────────────────────
 
-### Add memory (infer: true — LLM extracts facts, date stripped — use only for timeless facts)
+### Add memory
 POST {{baseUrl}}/api/v1/memories/
 Content-Type: application/json
 
 {
   "user_id": "{{userId}}",
-  "text": "[session: 2026-02-25] I am using FastAPI as primary python framework for BE",
+  "text": "I am using FastAPI as primary python  framework for BE",
   "app": "{{appName}}"
-}
-
-###
-
-### Add memory with date context (infer: false — stores as-is, date is searchable)
-# Use this pattern when you want "what did I use in February?" to work.
-# Include the date naturally in the text — it gets embedded and retrieved semantically.
-POST {{baseUrl}}/api/v1/memories/
-Content-Type: application/json
-
-{
-  "user_id": "{{userId}}",
-  "text": "On 2026-02-15 (February 2026 session): I am using FastAPI as primary python framework for BE",
-  "app": "{{appName}}",
-  "infer": false
 }
 
 ###
@@ -96,6 +81,11 @@ GET {{baseUrl}}/api/v1/config/mem0/llm
 
 ### Get embedder config
 GET {{baseUrl}}/api/v1/config/mem0/embedder
+
+###
+
+### Get OpenMemory config (custom extraction prompt)
+GET {{baseUrl}}/api/v1/config/openmemory
 
 ###
 

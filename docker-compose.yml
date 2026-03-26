@@ -70,6 +70,7 @@ services:
 
   mem0-mcp:
     image: mem0/openmemory-mcp
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8765", "--workers", "15"]
     ports:
       - "0.0.0.0:8181:8765"
     environment:
@@ -97,17 +98,16 @@ services:
     ports:
       - "0.0.0.0:8050:8000"
     environment:
-      NEO4J_URI: bolt://neo4j:7687
-      NEO4J_USER: neo4j
-      NEO4J_PASSWORD: hackathon2025
-      # Graphiti hardcodes OpenAI client at boot; use Google AI Studio's OpenAI-compatible endpoint
-      OPENAI_API_KEY: ${GOOGLE_API_KEY}
-      OPENAI_BASE_URL: https://generativelanguage.googleapis.com/v1beta/openai/
-      MODEL_NAME: gemini-2.0-flash
+      OPENAI_API_KEY: sk-not-needed
       SEMAPHORE_LIMIT: "10"
+      CONFIG_PATH: /app/mcp/config/config.yaml
+    volumes:
+      - ./graphiti-config.yaml:/app/mcp/config/config.yaml:ro
     depends_on:
       neo4j:
         condition: service_healthy
+      litellm-proxy:
+        condition: service_started
 
   # ══ MEMORY SYSTEM 3: Cognee MCP ═════════════════════════
 

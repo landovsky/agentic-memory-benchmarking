@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Use graphiti MCP server to store and retrieve key information, memories, decisions, gotchas and everything that will be useful as a context for future conversations.
+
 ## Project Overview
 
 A hackathon benchmark comparing three AI memory systems — **Mem0** (vector/Qdrant), **Graphiti** (knowledge graph/Neo4j), and **Cognee** (graph+semantic/PostgreSQL) — to evaluate recall, temporal reasoning, hallucination resistance, and other memory dimensions.

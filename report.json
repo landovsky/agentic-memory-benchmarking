@@ -1,0 +1,164 @@
+[
+  {
+    "test_case_id": "TC-020",
+    "dimension": "recall",
+    "query": "Where is the workflow for the `update-spaces` comm",
+    "expected": "/Users/tomas/git/hotdesk/.claude/command",
+    "actual": "The update-spaces command is located at /Users/tomas/git/hot",
+    "score": 1.0,
+    "latency_ms": 625
+  },
+  {
+    "test_case_id": "TC-021",
+    "dimension": "recall",
+    "query": "What happened when I tried to access the WeWork DR",
+    "expected": "It was blocked.",
+    "actual": "WeWork DRN blocked the assistant's access. | The assistant r",
+    "score": 0.0,
+    "latency_ms": 314
+  },
+  {
+    "test_case_id": "TC-022",
+    "dimension": "recall",
+    "query": "What is the design philosophy for pre-commit hooks",
+    "expected": "To run only fast checks; the full test s",
+    "actual": "The .git/hooks/pre-commit is a symlink to script/pre-commit.",
+    "score": 0.0,
+    "latency_ms": 286
+  },
+  {
+    "test_case_id": "TC-023",
+    "dimension": "recall",
+    "query": "What was the primary goal of the last session?",
+    "expected": "To scrape 7 independent coworking space ",
+    "actual": "The YAML file had its opening hours corrected in a prior ses",
+    "score": 0.0,
+    "latency_ms": 298
+  },
+  {
+    "test_case_id": "TC-024",
+    "dimension": "hallucination",
+    "query": "How do users log in to the hotdesk application?",
+    "expected": "I don't know / no info available",
+    "actual": "The user initiates the task in the project located at /Users",
+    "score": 0.0,
+    "latency_ms": 437
+  },
+  {
+    "test_case_id": "TC-025",
+    "dimension": "hallucination",
+    "query": "What type of database does the hotdesk application",
+    "expected": "I don't know / no info available",
+    "actual": "The /Users/tomas/git/ai/hotdesk/db/seeds.rb file reads YAML ",
+    "score": 0.0,
+    "latency_ms": 334
+  },
+  {
+    "test_case_id": "TC-026",
+    "dimension": "hallucination",
+    "query": "Which CI/CD pipeline tool is used for deploying th",
+    "expected": "I don't know / no info available",
+    "actual": "The assistant offers assistance to the user regarding the ho",
+    "score": 0.0,
+    "latency_ms": 380
+  },
+  {
+    "test_case_id": "TC-027",
+    "dimension": "scale",
+    "query": "What is the designated tool for website scraping?",
+    "expected": "bin/fetch",
+    "actual": "The scrape skill uses the --scrappey tool for web fetching. ",
+    "score": 1.0,
+    "latency_ms": 366
+  },
+  {
+    "test_case_id": "TC-028",
+    "dimension": "scale",
+    "query": "What is the designated tool for website scraping?",
+    "expected": "bin/fetch",
+    "actual": "The scrape skill uses the --scrappey tool for web fetching. ",
+    "score": 1.0,
+    "latency_ms": 370
+  },
+  {
+    "test_case_id": "TC-029",
+    "dimension": "proactive",
+    "query": "I'm trying to run the SSH security tests on 10.0.0",
+    "expected": "Should proactively recall the previous S",
+    "actual": "The assistant attempted to fetch the virtual office page, bu",
+    "score": 0.0,
+    "latency_ms": 251
+  },
+  {
+    "test_case_id": "TC-030",
+    "dimension": "proactive",
+    "query": "I'm trying to scrape pricing data from a Regus loc",
+    "expected": "Should proactively suggest that Regus we",
+    "actual": "The user requested that the assistant scrape City Empiria (R",
+    "score": 0.0,
+    "latency_ms": 264
+  },
+  {
+    "test_case_id": "TC-031",
+    "dimension": "proactive",
+    "query": "I'm trying to get image URLs from a website using ",
+    "expected": "Should proactively explain that `bin/fet",
+    "actual": "The bin/fetch tool was used to fetch the source_url. | The o",
+    "score": 0.0,
+    "latency_ms": 211
+  },
+  {
+    "test_case_id": "TC-032",
+    "dimension": "temporal",
+    "query": "What is the current decision rule for when to use ",
+    "expected": "Look for SPA signals, not just thin cont",
+    "actual": "JS-rendered sites require the --scrappey tool. | Locality ke",
+    "score": 0.0,
+    "latency_ms": 217
+  },
+  {
+    "test_case_id": "TC-033",
+    "dimension": "temporal",
+    "query": "What is the current Day Pass price for Scott.Weber",
+    "expected": "650 CZK (previously 900 CZK)",
+    "actual": "Day Pass pricing is not shown on the current page for Scott.",
+    "score": 0.0,
+    "latency_ms": 213
+  },
+  {
+    "test_case_id": "TC-034",
+    "dimension": "temporal",
+    "query": "How are images currently handled in the hotdesk pr",
+    "expected": "Downloaded and stored locally as assets ",
+    "actual": "The user initiates the task in the project located at /Users",
+    "score": 0.0,
+    "latency_ms": 231
+  },
+  {
+    "test_case_id": "TC-035",
+    "dimension": "temporal",
+    "query": "Where are email addresses stored in the coworking ",
+    "expected": "In a top-level email field (previously b",
+    "actual": "The YAML data files are for Coworking33. | The YAML data fil",
+    "score": 0.0,
+    "latency_ms": 237
+  },
+  {
+    "test_case_id": "TC-036",
+    "dimension": "type_distinction",
+    "query": "What is the preferred tool for website scraping, a",
+    "expected": "bin/fetch is preferred, WebFetch is forb",
+    "actual": "The scrape skill uses the --scrappey tool for web fetching. ",
+    "score": 0.0,
+    "latency_ms": 250
+  },
+  {
+    "test_case_id": "TC-037",
+    "dimension": "type_distinction",
+    "query": "What is the approach to data quality in the hotdes",
+    "expected": "High data quality is non-negotiable and ",
+    "actual": "The assistant offers assistance to the user regarding the ho",
+    "score": 0.0,
+    "latency_ms": 235
+  }
+]
