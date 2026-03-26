@@ -21,11 +21,12 @@ source .venv/bin/activate
 
 # Install dependencies
 pip install -r eval-harness/requirements.txt
+```
 
-# Configure environment
-cp .env.example .env
-# Fill in: GOOGLE_API_KEY, ANTHROPIC_API_KEY, VERTEX_PROJECT_ID
-# Adjust HOST_IP if services are on a remote machine
+The scripts read `.env` from `smoke-tests/graphiti/.env` (via `python-dotenv`). Symlink it to the main project's `.env` so you don't duplicate secrets:
+
+```bash
+ln -sf ../../.env .env
 ```
 
 ## Running
