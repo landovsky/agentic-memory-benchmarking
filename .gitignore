@@ -1,0 +1,10 @@
+infra/.env
+.env
+*.pyc
+__pycache__/
+.pytest_cache/
+shared-data/test-sessions/
+shared-data/eval-results/
+*.egg-info/
+dist/
+.venv/

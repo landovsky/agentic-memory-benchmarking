@@ -1,0 +1,112 @@
+[
+  {
+    "id": "TC-001",
+    "dimension": "recall",
+    "memory_type": "preference",
+    "project_scope": "global",
+    "setup_memory": "Uživatel preferuje Tailwind před Bootstrapem",
+    "query": "Jaký CSS framework mám rád?",
+    "expected_answer": "Tailwind",
+    "scoring_method": "exact_contains",
+    "notes": "Základní preference recall"
+  },
+  {
+    "id": "TC-002",
+    "dimension": "recall",
+    "memory_type": "semantic",
+    "project_scope": "medicmee",
+    "setup_memory": "MedicMee používá Rails 7.1 s PostgreSQL a Hotwire",
+    "query": "Jaký tech stack používá MedicMee?",
+    "expected_answer": "Rails 7.1, PostgreSQL, Hotwire",
+    "scoring_method": "llm_judge",
+    "notes": "Semantická paměť - projektové fakta"
+  },
+  {
+    "id": "TC-003",
+    "dimension": "temporal",
+    "memory_type": "semantic",
+    "project_scope": "hristehrou",
+    "setup_memory": "V lednu: HH používá Bootstrap. V březnu: Přešli na Tailwind.",
+    "query": "Jaký CSS framework aktuálně používá Hřiště Hrou?",
+    "expected_answer": "Tailwind (přešli z Bootstrap)",
+    "scoring_method": "llm_judge",
+    "notes": "Temporal - rozpoznání aktualizace"
+  },
+  {
+    "id": "TC-004",
+    "dimension": "isolation",
+    "memory_type": "preference",
+    "project_scope": "pharmacy",
+    "setup_memory": "Pharmacy: deploy přes K3s. MedicMee: deploy přes Dokku.",
+    "query": "Jak deployujeme Pharmacy?",
+    "expected_answer": "K3s",
+    "scoring_method": "exact_contains",
+    "notes": "Izolace projektů"
+  },
+  {
+    "id": "TC-005",
+    "dimension": "hallucination",
+    "memory_type": "_",
+    "project_scope": "global",
+    "setup_memory": "(žádná paměť o Reactu)",
+    "query": "Jakou React verzi používám?",
+    "expected_answer": "Nevím / nemám info",
+    "scoring_method": "llm_judge_negation",
+    "notes": "Anti-halucinace - systém NEMÁ odpovídat"
+  },
+  {
+    "id": "TC-006",
+    "dimension": "proactive",
+    "memory_type": "episodic",
+    "project_scope": "medicmee",
+    "setup_memory": "3. března: Řešili jsme timeout PostgreSQL - opraveno zvýšením pool size na 25",
+    "query": "Mám problém s timeouty DB připojení v MedicMee",
+    "expected_answer": "Měl by proaktivně zmínit předchozí řešení (pool size 25)",
+    "scoring_method": "llm_judge",
+    "notes": "Proaktivní využití epizodické paměti"
+  },
+  {
+    "id": "TC-007",
+    "dimension": "temporal",
+    "memory_type": "goal",
+    "project_scope": "hristehrou",
+    "setup_memory": "Q1: Cíl vydat HH ERP do konce Q2. Konec Q1: Posun cíle na Q3.",
+    "query": "Kdy má být hotový HH ERP?",
+    "expected_answer": "Q3 (původně Q2, posunuto)",
+    "scoring_method": "llm_judge",
+    "notes": "Temporal - aktualizace cíle"
+  },
+  {
+    "id": "TC-008",
+    "dimension": "scale",
+    "memory_type": "semantic",
+    "project_scope": "global",
+    "setup_memory": "(100 memories loaded)",
+    "query": "Jaký je deployment postup pro MedicMee?",
+    "expected_answer": "Dokku na VPS",
+    "scoring_method": "exact_contains",
+    "notes": "Baseline - 100 záznamů"
+  },
+  {
+    "id": "TC-009",
+    "dimension": "scale",
+    "memory_type": "semantic",
+    "project_scope": "global",
+    "setup_memory": "(1000 memories loaded)",
+    "query": "Jaký je deployment postup pro MedicMee?",
+    "expected_answer": "Dokku na VPS",
+    "scoring_method": "exact_contains",
+    "notes": "Scale test - 1000 záznamů"
+  },
+  {
+    "id": "TC-010",
+    "dimension": "type_distinction",
+    "memory_type": "preference+episodic",
+    "project_scope": "global",
+    "setup_memory": "Preference: Rád používám Tailwind. Epizodická: Včera jsem musel použít Bootstrap kvůli legacy klientovi.",
+    "query": "Jaký CSS framework preferuji?",
+    "expected_answer": "Tailwind (i když včera použil Bootstrap - to byla výjimka)",
+    "scoring_method": "llm_judge",
+    "notes": "Rozlišení preference vs. epizodická"
+  }
+]

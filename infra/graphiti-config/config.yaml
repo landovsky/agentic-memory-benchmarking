@@ -1,0 +1,33 @@
+# Graphiti MCP Server Configuration
+# LLM: Anthropic Claude, Embedder: Google Gemini
+
+llm:
+  provider: "anthropic"
+  model: "claude-3-5-haiku-20241022"
+  max_tokens: 4096
+  temperature: 0.1
+  providers:
+    anthropic:
+      api_key: ${ANTHROPIC_API_KEY}
+      api_url: "https://api.anthropic.com"
+      max_retries: 3
+    openai:
+      api_key: ""  # disabled
+    gemini:
+      api_key: ${GOOGLE_API_KEY}
+
+embedder:
+  provider: "gemini"
+  model: "text-embedding-004"
+  providers:
+    gemini:
+      api_key: ${GOOGLE_API_KEY}
+    openai:
+      api_key: ""  # disabled
+
+cross_encoder:
+  provider: "gemini"
+  model: "gemini-2.0-flash"
+  providers:
+    gemini:
+      api_key: ${GOOGLE_API_KEY}

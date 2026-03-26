@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "cognee": {
+      "transport": "sse",
+      "url": "http://HOST_IP:8000/mcp/sse"
+    }
+  }
+}
