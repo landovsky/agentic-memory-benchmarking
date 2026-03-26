@@ -81,6 +81,16 @@ def parse_session_file(path: Path) -> dict[str, Any] | None:
             if not content:
                 continue
 
+            # Skip system-injected noise (commands, caveats, hooks, task notifications)
+            if entry_type == "user" and (
+                content.startswith("<local-command-caveat>")
+                or content.startswith("<command-name>")
+                or content.startswith("<command-message>")
+                or content.startswith("<task-notification>")
+                or content.startswith("[Request interrupted")
+            ):
+                continue
+
             messages.append(
                 {
                     "role": entry_type,
