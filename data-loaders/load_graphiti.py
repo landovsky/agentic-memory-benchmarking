@@ -37,7 +37,7 @@ async def load_facts(
     group_id: str,
     neo4j_host: str,
     neo4j_password: str,
-    google_api_key: str,
+    litellm_url: str,
     dry_run: bool,
 ) -> tuple[int, int]:
     if dry_run:
@@ -55,33 +55,40 @@ async def load_facts(
     try:
         from graphiti_core import Graphiti  # type: ignore[import]
         from graphiti_core.nodes import EpisodeType  # type: ignore[import]
-        from graphiti_core.llm_client.gemini_client import GeminiClient, LLMConfig  # type: ignore[import]
-        from graphiti_core.embedder.gemini import GeminiEmbedder, GeminiEmbedderConfig  # type: ignore[import]
-        from graphiti_core.cross_encoder.gemini_reranker_client import GeminiRerankerClient  # type: ignore[import]
+        from graphiti_core.llm_client.openai_client import OpenAIClient, LLMConfig  # type: ignore[import]
+        from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig  # type: ignore[import]
+        from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient  # type: ignore[import]
     except ImportError:
         print(
             "Error: graphiti-core is not installed. "
-            'Run: pip install "graphiti-core[google-genai]"',
+            'Run: pip install "graphiti-core[openai]"',
             file=sys.stderr,
         )
         sys.exit(1)
 
-    llm_config = LLMConfig(api_key=google_api_key, model="gemini-2.0-flash")
+    llm_config = LLMConfig(
+        api_key="dummy",
+        base_url=litellm_url,
+        model="gemini-flash",
+    )
 
     print(f"\nConnecting to Graphiti (Neo4j at bolt://{neo4j_host}:7687) ...")
+    print(f"Using LiteLLM proxy at {litellm_url}")
     try:
         graphiti = Graphiti(
             f"bolt://{neo4j_host}:7687",
             "neo4j",
             neo4j_password,
-            llm_client=GeminiClient(config=llm_config),
-            embedder=GeminiEmbedder(
-                config=GeminiEmbedderConfig(
-                    api_key=google_api_key,
+            llm_client=OpenAIClient(config=llm_config),
+            embedder=OpenAIEmbedder(
+                config=OpenAIEmbedderConfig(
+                    api_key="dummy",
+                    base_url=litellm_url,
                     embedding_model="text-embedding-004",
+                    embedding_dim=768,
                 )
             ),
-            cross_encoder=GeminiRerankerClient(config=llm_config),
+            cross_encoder=OpenAIRerankerClient(config=llm_config),
         )
     except Exception as exc:
         print(f"Error: Failed to create Graphiti client: {exc}", file=sys.stderr)
@@ -159,11 +166,7 @@ def main() -> None:
 
     neo4j_host = args.neo4j_host or os.environ.get("NEO4J_HOST", "localhost")
     neo4j_password = os.environ.get("NEO4J_PASSWORD", "hackathon2025")
-    google_api_key = os.environ.get("GOOGLE_API_KEY", "")
-
-    if not args.dry_run and not google_api_key:
-        print("Error: GOOGLE_API_KEY environment variable is not set.", file=sys.stderr)
-        sys.exit(1)
+    litellm_url = os.environ.get("LITELLM_URL", "http://localhost:4000")
 
     facts: list[dict[str, Any]] = json.loads(args.facts.read_text(encoding="utf-8"))
     print(f"Loaded {len(facts)} fact(s) from {args.facts}")
@@ -174,7 +177,7 @@ def main() -> None:
             group_id=args.group_id,
             neo4j_host=neo4j_host,
             neo4j_password=neo4j_password,
-            google_api_key=google_api_key,
+            litellm_url=litellm_url,
             dry_run=args.dry_run,
         )
     )

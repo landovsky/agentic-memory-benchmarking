@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Extract memory-worthy facts from conversations using Claude.
+"""Extract memory-worthy facts from conversations via LLM.
+
+Uses LiteLLM proxy (OpenAI-compatible) to call the configured LLM
+(default: gemini-flash via Vertex AI).
 
 Usage:
     python memory_extractor.py --input sessions.json --output facts.json
@@ -14,7 +17,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-import anthropic
+import openai
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent / ".env")
@@ -45,7 +48,7 @@ Skip: greetings, debugging noise, tool outputs, generic coding patterns.
 CONVERSATION:
 {conversation}"""
 
-MODEL = "claude-3-5-haiku-20241022"
+MODEL = "gemini-flash"
 RATE_LIMIT_SLEEP = 0.5
 
 
@@ -62,9 +65,9 @@ def format_conversation(messages: list[dict[str, Any]]) -> str:
 
 
 def extract_facts_from_session(
-    session: dict[str, Any], client: anthropic.Anthropic
+    session: dict[str, Any], client: openai.OpenAI
 ) -> list[dict[str, Any]]:
-    """Call Claude to extract facts from a single session."""
+    """Call LLM via LiteLLM proxy to extract facts from a single session."""
     conversation_text = format_conversation(session.get("messages", []))
     if not conversation_text.strip():
         return []
@@ -72,12 +75,12 @@ def extract_facts_from_session(
     prompt = EXTRACTION_PROMPT.format(conversation=conversation_text)
 
     try:
-        response = client.messages.create(
+        response = client.chat.completions.create(
             model=MODEL,
             max_tokens=4096,
             messages=[{"role": "user", "content": prompt}],
         )
-        raw = response.content[0].text.strip()
+        raw = response.choices[0].message.content.strip()
     except Exception as exc:
         print(f"    API error: {exc}", file=sys.stderr)
         return []
@@ -158,12 +161,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("Error: ANTHROPIC_API_KEY environment variable is not set.", file=sys.stderr)
-        sys.exit(1)
-
-    client = anthropic.Anthropic(api_key=api_key)
+    litellm_url = os.environ.get("LITELLM_URL", "http://localhost:4000")
+    client = openai.OpenAI(base_url=litellm_url, api_key="dummy")
 
     if args.input:
         if not args.input.is_file():

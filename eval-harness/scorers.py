@@ -1,6 +1,11 @@
-"""Scoring functions for memory system evaluation."""
+"""Scoring functions for memory system evaluation.
+
+Uses LiteLLM proxy (OpenAI-compatible) for LLM judge scoring.
+"""
 
 from typing import Any
+
+JUDGE_MODEL = "gemini-flash"
 
 
 def exact_contains(actual: str, expected: str) -> float:
@@ -11,7 +16,7 @@ def exact_contains(actual: str, expected: str) -> float:
 
 
 def llm_judge(query: str, expected: str, actual: str, client: Any) -> float:
-    """Use Claude to score how well *actual* answers *query* given *expected*.
+    """Use LLM to score how well *actual* answers *query* given *expected*.
 
     Returns a float in [0.0, 1.0].
     """
@@ -23,12 +28,12 @@ def llm_judge(query: str, expected: str, actual: str, client: Any) -> float:
         "given the expected answer? Return ONLY a number."
     )
     try:
-        response = client.messages.create(
-            model="claude-3-5-haiku-20241022",
+        response = client.chat.completions.create(
+            model=JUDGE_MODEL,
             max_tokens=16,
             messages=[{"role": "user", "content": prompt}],
         )
-        raw = response.content[0].text.strip()
+        raw = response.choices[0].message.content.strip()
         score = float(raw)
         return max(0.0, min(1.0, score))
     except Exception:
@@ -49,12 +54,12 @@ def llm_judge_negation(query: str, expected: str, actual: str, client: Any) -> f
         "Return ONLY 1.0 (correct refusal) or 0.0 (hallucinated an answer)."
     )
     try:
-        response = client.messages.create(
-            model="claude-3-5-haiku-20241022",
+        response = client.chat.completions.create(
+            model=JUDGE_MODEL,
             max_tokens=16,
             messages=[{"role": "user", "content": prompt}],
         )
-        raw = response.content[0].text.strip()
+        raw = response.choices[0].message.content.strip()
         score = float(raw)
         return max(0.0, min(1.0, score))
     except Exception:
@@ -72,17 +77,17 @@ def score_answer(
 
     Supported methods:
         "exact_contains"     -> exact_contains
-        "llm_judge"          -> llm_judge  (requires client)
-        "llm_judge_negation" -> llm_judge_negation  (requires client)
+        "llm_judge"          -> llm_judge  (requires OpenAI-compatible client)
+        "llm_judge_negation" -> llm_judge_negation  (requires OpenAI-compatible client)
     """
     if method == "exact_contains":
         return exact_contains(actual, expected)
     if method == "llm_judge":
         if client is None:
-            raise ValueError("llm_judge scoring method requires an Anthropic client")
+            raise ValueError("llm_judge scoring method requires an OpenAI-compatible client")
         return llm_judge(query, expected, actual, client)
     if method == "llm_judge_negation":
         if client is None:
-            raise ValueError("llm_judge_negation scoring method requires an Anthropic client")
+            raise ValueError("llm_judge_negation scoring method requires an OpenAI-compatible client")
         return llm_judge_negation(query, expected, actual, client)
     raise ValueError(f"Unknown scoring method: {method!r}")

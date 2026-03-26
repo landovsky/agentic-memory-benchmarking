@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import anthropic
+import openai
 import psycopg2
 from dotenv import load_dotenv
 
@@ -147,26 +147,28 @@ def query_mem0(query: str, mem0_host: str) -> str:
 
 async def query_graphiti_async(query: str, neo4j_host: str) -> str:
     from graphiti_core import Graphiti  # type: ignore[import]
-    from graphiti_core.llm_client.gemini_client import GeminiClient, LLMConfig  # type: ignore[import]
-    from graphiti_core.embedder.gemini import GeminiEmbedder, GeminiEmbedderConfig  # type: ignore[import]
-    from graphiti_core.cross_encoder.gemini_reranker_client import GeminiRerankerClient  # type: ignore[import]
+    from graphiti_core.llm_client.openai_client import OpenAIClient, LLMConfig  # type: ignore[import]
+    from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig  # type: ignore[import]
+    from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient  # type: ignore[import]
 
-    google_api_key = os.environ.get("GOOGLE_API_KEY", "")
+    litellm_url = os.environ.get("LITELLM_URL", "http://localhost:4000")
     neo4j_password = os.environ.get("NEO4J_PASSWORD", "hackathon2025")
 
-    llm_config = LLMConfig(api_key=google_api_key, model="gemini-2.0-flash")
+    llm_config = LLMConfig(api_key="dummy", base_url=litellm_url, model="gemini-flash")
     graphiti = Graphiti(
         f"bolt://{neo4j_host}:7687",
         "neo4j",
         neo4j_password,
-        llm_client=GeminiClient(config=llm_config),
-        embedder=GeminiEmbedder(
-            config=GeminiEmbedderConfig(
-                api_key=google_api_key,
+        llm_client=OpenAIClient(config=llm_config),
+        embedder=OpenAIEmbedder(
+            config=OpenAIEmbedderConfig(
+                api_key="dummy",
+                base_url=litellm_url,
                 embedding_model="text-embedding-004",
+                embedding_dim=768,
             )
         ),
-        cross_encoder=GeminiRerankerClient(config=llm_config),
+        cross_encoder=OpenAIRerankerClient(config=llm_config),
     )
     try:
         results = await graphiti.search(
@@ -240,7 +242,7 @@ def run_evaluation(
     host: str,
     runner_name: str,
     postgres_host: str,
-    anthropic_client: anthropic.Anthropic,
+    llm_client: openai.OpenAI,
 ) -> list[dict[str, Any]]:
     from scorers import score_answer  # type: ignore[import]
 
@@ -286,7 +288,7 @@ def run_evaluation(
                 expected=expected,
                 method=scoring_method,
                 query=query,
-                client=anthropic_client if scoring_method in ("llm_judge", "llm_judge_negation") else None,
+                client=llm_client if scoring_method in ("llm_judge", "llm_judge_negation") else None,
             )
         except Exception as exc:
             print(f"  Scoring error: {exc}", file=sys.stderr)
@@ -399,11 +401,8 @@ def main() -> None:
     postgres_host = os.environ.get("POSTGRES_HOST", "localhost")
     host = args.host or "localhost"
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("Error: ANTHROPIC_API_KEY environment variable is not set.", file=sys.stderr)
-        sys.exit(1)
-    anthropic_client = anthropic.Anthropic(api_key=api_key)
+    litellm_url = os.environ.get("LITELLM_URL", "http://localhost:4000")
+    llm_client = openai.OpenAI(base_url=litellm_url, api_key="dummy")
 
     if not args.test_cases.is_file():
         print(f"Error: test cases file not found: {args.test_cases}", file=sys.stderr)
@@ -418,7 +417,7 @@ def main() -> None:
             host=host,
             runner_name=runner_name,
             postgres_host=postgres_host,
-            anthropic_client=anthropic_client,
+            llm_client=llm_client,
         )
         print_summary_table(summary, system)
 
