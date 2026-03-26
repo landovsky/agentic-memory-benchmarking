@@ -1,4 +1,4 @@
-infra/.env
+infra/
 .env
 *.pyc
 __pycache__/

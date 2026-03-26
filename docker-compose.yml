@@ -121,7 +121,7 @@ services:
     ports:
       - "0.0.0.0:9000:8080"
     volumes:
-      - ../shared-data:/web
+      - ./shared-data:/web
     environment:
       FOLDER: /web
 
