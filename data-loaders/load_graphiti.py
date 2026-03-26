@@ -22,6 +22,51 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 EPISODE_SLEEP = 0.2
 
 
+def _patch_openai_client_for_litellm():
+    """Patch graphiti's OpenAIClient to use chat.completions instead of responses API.
+
+    LiteLLM proxy does not support the OpenAI Responses API (/v1/responses).
+    Graphiti v0.28 uses responses.parse for structured completions. This patch
+    redirects structured completions to chat.completions with JSON mode.
+    """
+    from graphiti_core.llm_client.openai_client import OpenAIClient
+
+    async def _create_structured_completion(
+        self, model, messages, temperature, max_tokens, response_model, **kwargs
+    ):
+        import json as _json
+        # Inject the expected JSON schema so the LLM returns the right structure
+        schema = response_model.model_json_schema()
+        schema_instruction = (
+            f"You MUST respond with a JSON object matching this schema:\n"
+            f"{_json.dumps(schema, indent=2)}\n"
+            f"Return ONLY a valid JSON object, no markdown."
+        )
+        patched_messages = list(messages)
+        if patched_messages and patched_messages[0].get("role") == "system":
+            patched_messages[0] = {
+                **patched_messages[0],
+                "content": patched_messages[0]["content"] + "\n\n" + schema_instruction,
+            }
+        else:
+            patched_messages.insert(0, {"role": "system", "content": schema_instruction})
+
+        response = await self.client.chat.completions.create(
+            model=model,
+            messages=patched_messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format={"type": "json_object"},
+        )
+        class _WrappedResponse:
+            def __init__(self, chat_response):
+                self.output_text = chat_response.choices[0].message.content
+                self.usage = chat_response.usage
+        return _WrappedResponse(response)
+
+    OpenAIClient._create_structured_completion = _create_structured_completion
+
+
 def parse_timestamp(ts: str | None) -> datetime:
     """Parse an ISO timestamp string, falling back to now(UTC)."""
     if ts:
@@ -66,10 +111,13 @@ async def load_facts(
         )
         sys.exit(1)
 
+    _patch_openai_client_for_litellm()
+
     llm_config = LLMConfig(
         api_key="dummy",
         base_url=litellm_url,
         model="gemini-flash",
+        small_model="gemini-flash",
     )
 
     print(f"\nConnecting to Graphiti (Neo4j at bolt://{neo4j_host}:7687) ...")

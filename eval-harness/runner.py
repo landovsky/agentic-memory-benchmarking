@@ -145,6 +145,50 @@ def query_mem0(query: str, mem0_host: str) -> str:
     return "No results"
 
 
+def _patch_openai_client_for_litellm():
+    """Patch graphiti's OpenAIClient to use chat.completions instead of responses API.
+
+    LiteLLM proxy does not support the OpenAI Responses API (/v1/responses).
+    Graphiti v0.28 uses responses.parse for structured completions. This patch
+    redirects structured completions to chat.completions with JSON mode.
+    """
+    from graphiti_core.llm_client.openai_client import OpenAIClient as _OAIClient
+
+    async def _create_structured_completion(
+        self, model, messages, temperature, max_tokens, response_model, **kwargs
+    ):
+        import json as _json
+        schema = response_model.model_json_schema()
+        schema_instruction = (
+            f"You MUST respond with a JSON object matching this schema:\n"
+            f"{_json.dumps(schema, indent=2)}\n"
+            f"Return ONLY a valid JSON object, no markdown."
+        )
+        patched_messages = list(messages)
+        if patched_messages and patched_messages[0].get("role") == "system":
+            patched_messages[0] = {
+                **patched_messages[0],
+                "content": patched_messages[0]["content"] + "\n\n" + schema_instruction,
+            }
+        else:
+            patched_messages.insert(0, {"role": "system", "content": schema_instruction})
+
+        response = await self.client.chat.completions.create(
+            model=model,
+            messages=patched_messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format={"type": "json_object"},
+        )
+        class _WrappedResponse:
+            def __init__(self, chat_response):
+                self.output_text = chat_response.choices[0].message.content
+                self.usage = chat_response.usage
+        return _WrappedResponse(response)
+
+    _OAIClient._create_structured_completion = _create_structured_completion
+
+
 async def query_graphiti_async(query: str, neo4j_host: str) -> str:
     from graphiti_core import Graphiti  # type: ignore[import]
     from graphiti_core.llm_client.openai_client import OpenAIClient, LLMConfig  # type: ignore[import]
@@ -154,7 +198,9 @@ async def query_graphiti_async(query: str, neo4j_host: str) -> str:
     litellm_url = os.environ.get("LITELLM_URL", "http://localhost:4000")
     neo4j_password = os.environ.get("NEO4J_PASSWORD", "hackathon2025")
 
-    llm_config = LLMConfig(api_key="dummy", base_url=litellm_url, model="gemini-flash")
+    _patch_openai_client_for_litellm()
+
+    llm_config = LLMConfig(api_key="dummy", base_url=litellm_url, model="gemini-flash", small_model="gemini-flash")
     graphiti = Graphiti(
         f"bolt://{neo4j_host}:7687",
         "neo4j",
