@@ -10,6 +10,15 @@ model_list:
       model: vertex_ai/text-embedding-004
       vertex_project: coworking-aggegator
       vertex_location: europe-west3
+      dimensions: 768
+
+  - model_name: text-embedding-004
+    litellm_params:
+      model: vertex_ai/text-embedding-004
+      vertex_project: coworking-aggegator
+      vertex_location: europe-west3
+    model_info:
+      supports_embedding_dim: false
 
 litellm_settings:
   drop_params: true

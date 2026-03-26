@@ -26,6 +26,10 @@ services:
       - "0.0.0.0:6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
+    networks:
+      default:
+        aliases:
+          - mem0_store
 
   neo4j:
     image: neo4j:5-community
@@ -81,6 +85,7 @@ services:
       OPENAI_BASE_URL: http://litellm-proxy:4000
     volumes:
       - ./credentials/gcp-sa.json:/credentials/gcp-sa.json:ro
+      - mem0_db:/usr/src/openmemory
     depends_on:
       - qdrant
       - litellm-proxy
@@ -148,3 +153,4 @@ volumes:
   pg_data:
   qdrant_data:
   neo4j_data:
+  mem0_db:
