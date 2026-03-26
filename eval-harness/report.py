@@ -41,19 +41,19 @@ def fetch_data(conn: Any) -> tuple[list[dict], list[dict]]:
             """
             SELECT
                 id,
-                run_at,
-                runner_name,
+                run_timestamp,
+                runner,
                 system_name,
                 test_case_id,
                 dimension,
                 query,
-                expected,
-                actual,
+                expected_answer,
+                actual_answer,
                 score,
                 latency_ms,
-                scoring_method
+                notes
             FROM eval_runs
-            ORDER BY system_name, test_case_id, run_at
+            ORDER BY system_name, test_case_id, run_timestamp
             """
         )
         detail_rows = [dict(r) for r in cur.fetchall()]
@@ -135,14 +135,14 @@ def generate_html(summary_rows: list[dict], detail_rows: list[dict]) -> str:
         is_best = abs(score - best.get(tid, -1)) < 1e-9
         bg = "background:#d4edda;" if is_best else ""
         query_trunc = str(r.get("query", ""))[:120]
-        actual_trunc = str(r.get("actual", ""))[:200]
-        expected_trunc = str(r.get("expected", ""))[:120]
-        run_at = str(r.get("run_at", ""))[:19]
+        actual_trunc = str(r.get("actual_answer", ""))[:200]
+        expected_trunc = str(r.get("expected_answer", ""))[:120]
+        run_at = str(r.get("run_timestamp", ""))[:19]
         detail_rows_html += (
             f'<tr style="{bg}">'
             f"<td>{r.get('id')}</td>"
             f"<td>{run_at}</td>"
-            f"<td>{r.get('runner_name', '')}</td>"
+            f"<td>{r.get('runner', '')}</td>"
             f"<td>{r.get('system_name', '')}</td>"
             f"<td>{tid}</td>"
             f"<td>{r.get('dimension', '')}</td>"
@@ -151,7 +151,7 @@ def generate_html(summary_rows: list[dict], detail_rows: list[dict]) -> str:
             f"<td>{actual_trunc}</td>"
             f"<td>{score:.3f}</td>"
             f"<td>{r.get('latency_ms', '')}</td>"
-            f"<td>{r.get('scoring_method', '')}</td>"
+            f"<td>{r.get('notes', '')}</td>"
             "</tr>\n"
         )
 
@@ -248,7 +248,7 @@ def main() -> None:
             host=postgres_host,
             port=5432,
             dbname="eval_results",
-            user="postgres",
+            user="hackathon",
             password="hackathon2025",
         )
     except Exception as exc:

@@ -71,18 +71,18 @@ def score_answer(
     """Dispatch to the appropriate scorer based on *method*.
 
     Supported methods:
-        "exact"     -> exact_contains
-        "llm"       -> llm_judge  (requires client)
-        "negation"  -> llm_judge_negation  (requires client)
+        "exact_contains"     -> exact_contains
+        "llm_judge"          -> llm_judge  (requires client)
+        "llm_judge_negation" -> llm_judge_negation  (requires client)
     """
-    if method == "exact":
+    if method == "exact_contains":
         return exact_contains(actual, expected)
-    if method == "llm":
+    if method == "llm_judge":
         if client is None:
-            raise ValueError("llm scoring method requires an Anthropic client")
+            raise ValueError("llm_judge scoring method requires an Anthropic client")
         return llm_judge(query, expected, actual, client)
-    if method == "negation":
+    if method == "llm_judge_negation":
         if client is None:
-            raise ValueError("negation scoring method requires an Anthropic client")
+            raise ValueError("llm_judge_negation scoring method requires an Anthropic client")
         return llm_judge_negation(query, expected, actual, client)
     raise ValueError(f"Unknown scoring method: {method!r}")

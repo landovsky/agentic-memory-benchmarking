@@ -41,7 +41,7 @@ def get_db_connection(postgres_host: str) -> Any:
         host=postgres_host,
         port=5432,
         dbname="eval_results",
-        user="postgres",
+        user="hackathon",
         password="hackathon2025",
     )
 
@@ -51,18 +51,19 @@ def ensure_table(conn: Any) -> None:
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS eval_runs (
-                id            SERIAL PRIMARY KEY,
-                runner_name   TEXT,
-                system_name   TEXT,
-                test_case_id  TEXT,
-                dimension     TEXT,
-                query         TEXT,
-                expected      TEXT,
-                actual        TEXT,
-                score         FLOAT,
-                latency_ms    INT,
-                scoring_method TEXT,
-                run_at        TIMESTAMPTZ DEFAULT NOW()
+                id              SERIAL PRIMARY KEY,
+                system_name     TEXT NOT NULL,
+                test_case_id    TEXT NOT NULL,
+                dimension       TEXT NOT NULL,
+                memory_type     TEXT,
+                query           TEXT NOT NULL,
+                expected_answer TEXT,
+                actual_answer   TEXT,
+                score           NUMERIC(3,2),
+                latency_ms      INTEGER,
+                notes           TEXT,
+                run_timestamp   TIMESTAMPTZ DEFAULT NOW(),
+                runner          TEXT
             )
             """
         )
@@ -75,6 +76,7 @@ def save_result(
     system_name: str,
     test_case_id: str,
     dimension: str,
+    memory_type: str,
     query: str,
     expected: str,
     actual: str,
@@ -86,21 +88,23 @@ def save_result(
         cur.execute(
             """
             INSERT INTO eval_runs
-                (runner_name, system_name, test_case_id, dimension,
-                 query, expected, actual, score, latency_ms, scoring_method)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (system_name, test_case_id, dimension, memory_type,
+                 query, expected_answer, actual_answer, score, latency_ms,
+                 notes, runner)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
-                runner_name,
                 system_name,
                 test_case_id,
                 dimension,
+                memory_type,
                 query,
                 expected,
                 actual,
                 score,
                 latency_ms,
                 scoring_method,
+                runner_name,
             ),
         )
     conn.commit()
@@ -257,11 +261,12 @@ def run_evaluation(
     summary: list[dict[str, Any]] = []
 
     for row in rows:
-        test_case_id = row.get("id", row.get("test_case_id", "unknown"))
+        test_case_id = row.get("id", "unknown")
         query = row.get("query", "")
-        expected = row.get("expected", "")
+        expected = row.get("expected_answer", "")
         dimension = row.get("dimension", "recall")
-        scoring_method = row.get("scoring_method", "exact")
+        memory_type = row.get("memory_type", "")
+        scoring_method = row.get("scoring_method", "exact_contains")
 
         if not query:
             continue
@@ -281,7 +286,7 @@ def run_evaluation(
                 expected=expected,
                 method=scoring_method,
                 query=query,
-                client=anthropic_client if scoring_method in ("llm", "negation") else None,
+                client=anthropic_client if scoring_method in ("llm_judge", "llm_judge_negation") else None,
             )
         except Exception as exc:
             print(f"  Scoring error: {exc}", file=sys.stderr)
@@ -298,6 +303,7 @@ def run_evaluation(
                     system_name=system,
                     test_case_id=test_case_id,
                     dimension=dimension,
+                    memory_type=memory_type,
                     query=query,
                     expected=expected,
                     actual=actual,
