@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Summarize stripped sessions into topic inventories for test case curation.
 
-Sends each session's dialogue to Claude and returns structured topics
-tagged by benchmark dimension and memory type.
+Uses Gemini on Vertex AI with async concurrent requests for speed.
 
 Usage:
     python session_summarizer.py --input hotdesk_sessions.json --output summaries.json
@@ -10,16 +9,20 @@ Usage:
 """
 
 import argparse
+import asyncio
 import json
 import sys
-import time
 from pathlib import Path
 from typing import Any
 
-import anthropic
-from dotenv import load_dotenv
+from google import genai
 
-load_dotenv(Path(__file__).parent.parent / ".env")
+VERTEX_PROJECT = "coworking-aggegator"
+VERTEX_LOCATION = "europe-west3"
+MODEL = "gemini-2.5-flash"
+CONCURRENCY = 10
+MAX_MESSAGES_PER_CHUNK = 50
+CHUNK_OVERLAP = 5
 
 SUMMARIZATION_PROMPT = """\
 Analyze this coding session conversation and extract facts worth remembering \
@@ -68,14 +71,8 @@ If the conversation contains nothing worth remembering, return an empty array: [
 CONVERSATION:
 {conversation}"""
 
-MODEL = "claude-haiku-4-5-20251001"
-RATE_LIMIT_SLEEP = 0.5
-MAX_MESSAGES_PER_CHUNK = 50
-CHUNK_OVERLAP = 5
-
 
 def format_conversation(messages: list[dict[str, Any]]) -> str:
-    """Format messages into a readable conversation string."""
     lines: list[str] = []
     for msg in messages:
         role = msg.get("role", "unknown").upper()
@@ -86,13 +83,9 @@ def format_conversation(messages: list[dict[str, Any]]) -> str:
     return "\n\n".join(lines)
 
 
-def chunk_messages(
-    messages: list[dict[str, Any]],
-) -> list[list[dict[str, Any]]]:
-    """Split messages into chunks with overlap for large sessions."""
+def chunk_messages(messages: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
     if len(messages) <= MAX_MESSAGES_PER_CHUNK:
         return [messages]
-
     chunks: list[list[dict[str, Any]]] = []
     start = 0
     while start < len(messages):
@@ -102,70 +95,86 @@ def chunk_messages(
     return chunks
 
 
-def extract_topics_from_text(
-    conversation_text: str, client: anthropic.Anthropic
-) -> list[dict[str, Any]]:
-    """Call Claude to extract topics from a conversation chunk."""
-    prompt = SUMMARIZATION_PROMPT.format(conversation=conversation_text)
-
-    try:
-        response = client.messages.create(
-            model=MODEL,
-            max_tokens=4096,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        raw = response.content[0].text.strip()
-    except Exception as exc:
-        print(f"    API error: {exc}", file=sys.stderr)
-        return []
-
-    # Strip markdown code fences if present
+def parse_json_response(raw: str) -> list[dict[str, Any]]:
+    """Parse JSON from LLM response, stripping code fences if needed."""
     if raw.startswith("```"):
         lines = raw.splitlines()
         raw = "\n".join(
             line for line in lines if not line.strip().startswith("```")
         ).strip()
-
     try:
-        topics = json.loads(raw)
-        if not isinstance(topics, list):
-            print("    Unexpected response shape (not a list)", file=sys.stderr)
-            return []
-    except json.JSONDecodeError as exc:
-        print(f"    JSON parse error: {exc}", file=sys.stderr)
-        print(f"    Raw response snippet: {raw[:300]}", file=sys.stderr)
+        result = json.loads(raw)
+        return result if isinstance(result, list) else []
+    except json.JSONDecodeError:
         return []
 
-    return topics
+
+async def process_chunk(
+    client: genai.Client,
+    semaphore: asyncio.Semaphore,
+    session_id: str,
+    chunk_idx: int,
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Process a single conversation chunk through Gemini."""
+    conversation_text = format_conversation(messages)
+    if not conversation_text.strip():
+        return []
+
+    prompt = SUMMARIZATION_PROMPT.format(conversation=conversation_text)
+
+    async with semaphore:
+        for attempt in range(3):
+            try:
+                response = await client.aio.models.generate_content(
+                    model=MODEL,
+                    contents=prompt,
+                    config={"max_output_tokens": 4096, "temperature": 0.1},
+                )
+                text = response.text
+                if not text:
+                    return []
+                topics = parse_json_response(text.strip())
+                return topics
+            except Exception as exc:
+                if attempt == 2:
+                    print(
+                        f"    [{session_id}] chunk {chunk_idx} failed: {exc}",
+                        file=sys.stderr,
+                    )
+                    return []
+                await asyncio.sleep(2**attempt)
+    return []
 
 
-def summarize_session(
-    session: dict[str, Any], client: anthropic.Anthropic
+async def process_session(
+    client: genai.Client,
+    semaphore: asyncio.Semaphore,
+    session: dict[str, Any],
 ) -> dict[str, Any]:
-    """Extract topics from a single session, handling chunking."""
+    """Process all chunks of a session concurrently."""
+    session_id = session.get("session_id", "unknown")
     messages = session.get("messages", [])
+
     if not messages:
         return {
-            "session_id": session.get("session_id", "unknown"),
+            "session_id": session_id,
             "timestamp_range": [None, None],
             "topics": [],
         }
 
     chunks = chunk_messages(messages)
+    tasks = [
+        process_chunk(client, semaphore, session_id, i, chunk)
+        for i, chunk in enumerate(chunks)
+    ]
+    chunk_results = await asyncio.gather(*tasks)
+
+    # Flatten and deduplicate
     all_topics: list[dict[str, Any]] = []
-
-    for i, chunk in enumerate(chunks):
-        if len(chunks) > 1:
-            print(f"      Chunk {i + 1}/{len(chunks)} ({len(chunk)} messages)", file=sys.stderr)
-        conversation_text = format_conversation(chunk)
-        if not conversation_text.strip():
-            continue
-        topics = extract_topics_from_text(conversation_text, client)
+    for topics in chunk_results:
         all_topics.extend(topics)
-        if i < len(chunks) - 1:
-            time.sleep(RATE_LIMIT_SLEEP)
 
-    # Deduplicate by fact text (rough dedup)
     seen: set[str] = set()
     unique_topics: list[dict[str, Any]] = []
     for topic in all_topics:
@@ -175,7 +184,7 @@ def summarize_session(
             unique_topics.append(topic)
 
     return {
-        "session_id": session.get("session_id", "unknown"),
+        "session_id": session_id,
         "file": session.get("file", ""),
         "project_hash": session.get("project_hash"),
         "timestamp_range": [
@@ -187,39 +196,47 @@ def summarize_session(
     }
 
 
+async def run(sessions: list[dict[str, Any]], concurrency: int) -> list[dict[str, Any]]:
+    client = genai.Client(
+        vertexai=True,
+        project=VERTEX_PROJECT,
+        location=VERTEX_LOCATION,
+    )
+    semaphore = asyncio.Semaphore(concurrency)
+
+    print(f"Processing {len(sessions)} session(s) with concurrency={concurrency} ...", file=sys.stderr)
+
+    tasks = [process_session(client, semaphore, s) for s in sessions]
+    summaries = await asyncio.gather(*tasks)
+
+    total_topics = sum(len(s["topics"]) for s in summaries)
+    print(f"\nDone. {total_topics} topic(s) from {len(summaries)} session(s).", file=sys.stderr)
+    return list(summaries)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Summarize stripped sessions into topic inventories."
     )
     parser.add_argument(
-        "--input",
-        "-i",
-        type=Path,
-        required=True,
-        metavar="sessions.json",
+        "--input", "-i", type=Path, required=True, metavar="sessions.json",
         help="JSON file produced by jsonl_parser.py",
     )
     parser.add_argument(
-        "--output",
-        "-o",
-        type=Path,
-        default=Path("summaries.json"),
-        metavar="summaries.json",
-        help="Output JSON file (default: summaries.json)",
+        "--output", "-o", type=Path, default=Path("summaries.json"),
+        metavar="summaries.json", help="Output JSON file (default: summaries.json)",
     )
     parser.add_argument(
-        "--max-sessions",
-        type=int,
-        default=None,
-        metavar="N",
+        "--max-sessions", type=int, default=None, metavar="N",
         help="Process only the first N sessions (for testing)",
     )
     parser.add_argument(
-        "--min-messages",
-        type=int,
-        default=3,
-        metavar="N",
+        "--min-messages", type=int, default=3, metavar="N",
         help="Skip sessions with fewer than N messages (default: 3)",
+    )
+    parser.add_argument(
+        "--concurrency", type=int, default=CONCURRENCY, metavar="N",
+        help=f"Max concurrent API requests (default: {CONCURRENCY})",
     )
     args = parser.parse_args()
 
@@ -227,48 +244,19 @@ def main() -> None:
         print(f"Error: {args.input} does not exist", file=sys.stderr)
         sys.exit(1)
 
-    client = anthropic.Anthropic()
-
     sessions: list[dict[str, Any]] = json.loads(
         args.input.read_text(encoding="utf-8")
     )
-
-    # Filter tiny sessions
     sessions = [s for s in sessions if s.get("message_count", 0) >= args.min_messages]
-
     if args.max_sessions:
         sessions = sessions[: args.max_sessions]
 
-    print(f"Processing {len(sessions)} session(s) ...", file=sys.stderr)
-
-    summaries: list[dict[str, Any]] = []
-    total_topics = 0
-
-    for idx, session in enumerate(sessions, start=1):
-        session_id = session.get("session_id", f"session_{idx}")
-        msg_count = session.get("message_count", 0)
-        print(
-            f"  [{idx}/{len(sessions)}] Session {session_id} ({msg_count} messages) ...",
-            file=sys.stderr,
-        )
-
-        summary = summarize_session(session, client)
-        topic_count = len(summary["topics"])
-        total_topics += topic_count
-        print(f"    → {topic_count} topic(s) extracted.", file=sys.stderr)
-        summaries.append(summary)
-
-        if idx < len(sessions):
-            time.sleep(RATE_LIMIT_SLEEP)
+    summaries = asyncio.run(run(sessions, args.concurrency))
 
     args.output.write_text(
         json.dumps(summaries, indent=2, ensure_ascii=False), encoding="utf-8"
     )
-    print(
-        f"\nDone. {total_topics} total topic(s) from {len(summaries)} session(s). "
-        f"Written to {args.output}",
-        file=sys.stderr,
-    )
+    print(f"Written to {args.output}", file=sys.stderr)
 
 
 if __name__ == "__main__":

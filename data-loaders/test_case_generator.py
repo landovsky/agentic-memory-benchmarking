@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Generate benchmark test cases from session summaries.
 
-Takes topic summaries produced by session_summarizer.py and generates
-test cases per benchmark dimension.
+Uses Gemini on Vertex AI. Takes topic summaries from session_summarizer.py
+and generates test cases per benchmark dimension.
 
 Usage:
     python test_case_generator.py --input summaries.json --output test_cases_draft.json
@@ -11,21 +11,18 @@ Usage:
 """
 
 import argparse
+import asyncio
 import json
 import sys
-import time
 from pathlib import Path
 from typing import Any
 
-import anthropic
-from dotenv import load_dotenv
+from google import genai
 
-load_dotenv(Path(__file__).parent.parent / ".env")
+VERTEX_PROJECT = "coworking-aggegator"
+VERTEX_LOCATION = "europe-west3"
+MODEL = "gemini-2.5-flash"
 
-MODEL = "claude-haiku-4-5-20251001"
-RATE_LIMIT_SLEEP = 0.5
-
-# Existing test cases as few-shot examples, grouped by dimension
 EXAMPLES = {
     "recall": {
         "id": "TC-001",
@@ -95,42 +92,6 @@ EXAMPLES = {
     },
 }
 
-GENERATION_PROMPT = """\
-You are generating benchmark test cases for an AI memory system evaluation.
-
-Given the extracted topics from real coding sessions, generate test cases \
-for the dimension: {dimension}.
-
-Each test case must follow this exact JSON schema:
-{{
-  "id": "TC-{start_id:03d}",
-  "dimension": "{dimension}",
-  "memory_type": "preference|episodic|semantic|goal",
-  "project_scope": "hotdesk",
-  "setup_memory": "What memory should exist in the system for this test",
-  "query": "The question to ask the system (in English)",
-  "expected_answer": "The expected response (in English)",
-  "scoring_method": "exact_contains|llm_judge|llm_judge_negation",
-  "notes": "Brief explanation of what this tests"
-}}
-
-## Dimension: {dimension}
-{dimension_guidance}
-
-## Example test case for this dimension:
-{example}
-
-## Available topics from real sessions:
-{topics}
-
-Generate exactly {count} test cases. Use the real topics above as the basis \
-for each test case. Test cases must be grounded in the actual session data - \
-do not invent facts that aren't in the topics.
-
-{special_instructions}
-
-Return a JSON array only (no other text)."""
-
 DIMENSION_GUIDANCE = {
     "recall": (
         "Test whether the system can retrieve a known fact when asked directly. "
@@ -182,9 +143,44 @@ SPECIAL_INSTRUCTIONS = {
     ),
 }
 
+GENERATION_PROMPT = """\
+You are generating benchmark test cases for an AI memory system evaluation.
+
+Given the extracted topics from real coding sessions, generate test cases \
+for the dimension: {dimension}.
+
+Each test case must follow this exact JSON schema:
+{{
+  "id": "TC-{start_id:03d}",
+  "dimension": "{dimension}",
+  "memory_type": "preference|episodic|semantic|goal",
+  "project_scope": "hotdesk",
+  "setup_memory": "What memory should exist in the system for this test",
+  "query": "The question to ask the system (in English)",
+  "expected_answer": "The expected response (in English)",
+  "scoring_method": "exact_contains|llm_judge|llm_judge_negation",
+  "notes": "Brief explanation of what this tests"
+}}
+
+## Dimension: {dimension}
+{dimension_guidance}
+
+## Example test case for this dimension:
+{example}
+
+## Available topics from real sessions:
+{topics}
+
+Generate exactly {count} test cases. Use the real topics above as the basis \
+for each test case. Test cases must be grounded in the actual session data - \
+do not invent facts that aren't in the topics.
+
+{special_instructions}
+
+Return a JSON array only (no other text)."""
+
 
 def parse_dimensions(dim_string: str) -> dict[str, int]:
-    """Parse 'temporal:4,hallucination:3' into a dict."""
     result: dict[str, int] = {}
     for pair in dim_string.split(","):
         pair = pair.strip()
@@ -192,12 +188,11 @@ def parse_dimensions(dim_string: str) -> dict[str, int]:
             dim, count = pair.split(":", 1)
             result[dim.strip()] = int(count.strip())
         else:
-            result[pair.strip()] = 3  # default count
+            result[pair.strip()] = 3
     return result
 
 
 def collect_topics(summaries: list[dict[str, Any]]) -> str:
-    """Collect all topics into a formatted string for the prompt."""
     lines: list[str] = []
     for summary in summaries:
         for topic in summary.get("topics", []):
@@ -209,14 +204,26 @@ def collect_topics(summaries: list[dict[str, Any]]) -> str:
     return "\n".join(lines) if lines else "(no topics found)"
 
 
-def generate_for_dimension(
+def parse_json_response(raw: str) -> list[dict[str, Any]]:
+    if raw.startswith("```"):
+        lines = raw.splitlines()
+        raw = "\n".join(
+            line for line in lines if not line.strip().startswith("```")
+        ).strip()
+    try:
+        result = json.loads(raw)
+        return result if isinstance(result, list) else []
+    except json.JSONDecodeError:
+        return []
+
+
+async def generate_for_dimension(
+    client: genai.Client,
     dimension: str,
     count: int,
     start_id: int,
     topics_text: str,
-    client: anthropic.Anthropic,
 ) -> list[dict[str, Any]]:
-    """Generate test cases for a single dimension."""
     example = EXAMPLES.get(dimension, EXAMPLES["recall"])
     example_text = json.dumps(example, indent=2, ensure_ascii=False)
     guidance = DIMENSION_GUIDANCE.get(dimension, "")
@@ -232,39 +239,69 @@ def generate_for_dimension(
         special_instructions=special,
     )
 
-    try:
-        response = client.messages.create(
-            model=MODEL,
-            max_tokens=4096,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        raw = response.content[0].text.strip()
-    except Exception as exc:
-        print(f"    API error: {exc}", file=sys.stderr)
-        return []
+    for attempt in range(3):
+        try:
+            response = await client.aio.models.generate_content(
+                model=MODEL,
+                contents=prompt,
+                config={"max_output_tokens": 4096, "temperature": 0.2},
+            )
+            text = response.text
+            if not text:
+                return []
+            cases = parse_json_response(text.strip())
+            # Reassign IDs
+            for i, case in enumerate(cases):
+                case["id"] = f"TC-{start_id + i:03d}"
+            return cases
+        except Exception as exc:
+            if attempt == 2:
+                print(f"    [{dimension}] failed: {exc}", file=sys.stderr)
+                return []
+            await asyncio.sleep(2**attempt)
+    return []
 
-    # Strip markdown code fences
-    if raw.startswith("```"):
-        lines = raw.splitlines()
-        raw = "\n".join(
-            line for line in lines if not line.strip().startswith("```")
-        ).strip()
 
-    try:
-        cases = json.loads(raw)
-        if not isinstance(cases, list):
-            print("    Unexpected response shape (not a list)", file=sys.stderr)
-            return []
-    except json.JSONDecodeError as exc:
-        print(f"    JSON parse error: {exc}", file=sys.stderr)
-        print(f"    Raw response snippet: {raw[:300]}", file=sys.stderr)
-        return []
+async def run(
+    summaries: list[dict[str, Any]],
+    dimensions: dict[str, int],
+    start_id: int,
+) -> list[dict[str, Any]]:
+    client = genai.Client(
+        vertexai=True,
+        project=VERTEX_PROJECT,
+        location=VERTEX_LOCATION,
+    )
+    topics_text = collect_topics(summaries)
+    topic_count = sum(len(s.get("topics", [])) for s in summaries)
+    total_target = sum(dimensions.values())
+    print(
+        f"Loaded {topic_count} topic(s). "
+        f"Generating {total_target} test case(s) across {len(dimensions)} dimension(s).",
+        file=sys.stderr,
+    )
 
-    # Reassign IDs sequentially
-    for i, case in enumerate(cases):
+    # Generate all dimensions concurrently
+    current_id = start_id
+    tasks = []
+    dim_order = []
+    for dim, count in dimensions.items():
+        tasks.append(generate_for_dimension(client, dim, count, current_id, topics_text))
+        dim_order.append(dim)
+        current_id += count
+
+    results = await asyncio.gather(*tasks)
+
+    all_cases: list[dict[str, Any]] = []
+    for dim, cases in zip(dim_order, results):
+        print(f"  [{dim}] → {len(cases)} case(s)", file=sys.stderr)
+        all_cases.extend(cases)
+
+    # Re-sequence IDs
+    for i, case in enumerate(all_cases):
         case["id"] = f"TC-{start_id + i:03d}"
 
-    return cases
+    return all_cases
 
 
 def main() -> None:
@@ -272,33 +309,21 @@ def main() -> None:
         description="Generate benchmark test cases from session summaries."
     )
     parser.add_argument(
-        "--input",
-        "-i",
-        type=Path,
-        required=True,
-        metavar="summaries.json",
+        "--input", "-i", type=Path, required=True, metavar="summaries.json",
         help="JSON file produced by session_summarizer.py",
     )
     parser.add_argument(
-        "--output",
-        "-o",
-        type=Path,
-        default=Path("test_cases_draft.json"),
-        metavar="test_cases_draft.json",
-        help="Output JSON file (default: test_cases_draft.json)",
+        "--output", "-o", type=Path, default=Path("test_cases_draft.json"),
+        metavar="test_cases_draft.json", help="Output JSON file",
     )
     parser.add_argument(
-        "--dimensions",
-        "-d",
-        type=str,
+        "--dimensions", "-d", type=str,
         default="recall:4,temporal:4,hallucination:3,proactive:3,scale:2,type_distinction:2",
         help="Dimensions and counts, e.g. 'temporal:4,hallucination:3'",
     )
     parser.add_argument(
-        "--start-id",
-        type=int,
-        default=20,
-        help="Starting TC-NNN ID number (default: 20, since TC-001-019 exist)",
+        "--start-id", type=int, default=20,
+        help="Starting TC-NNN ID number (default: 20)",
     )
     args = parser.parse_args()
 
@@ -306,46 +331,21 @@ def main() -> None:
         print(f"Error: {args.input} does not exist", file=sys.stderr)
         sys.exit(1)
 
-    client = anthropic.Anthropic()
-
     summaries: list[dict[str, Any]] = json.loads(
         args.input.read_text(encoding="utf-8")
     )
-    topics_text = collect_topics(summaries)
-
     topic_count = sum(len(s.get("topics", [])) for s in summaries)
-    print(f"Loaded {topic_count} topic(s) from {len(summaries)} session(s).", file=sys.stderr)
-
     if topic_count == 0:
-        print("Error: No topics found in summaries. Run session_summarizer.py first.", file=sys.stderr)
+        print("Error: No topics found. Run session_summarizer.py first.", file=sys.stderr)
         sys.exit(1)
 
     dimensions = parse_dimensions(args.dimensions)
-    total_target = sum(dimensions.values())
-    print(
-        f"Generating {total_target} test case(s) across {len(dimensions)} dimension(s): "
-        f"{dimensions}",
-        file=sys.stderr,
-    )
-
-    all_cases: list[dict[str, Any]] = []
-    current_id = args.start_id
-
-    for dim, count in dimensions.items():
-        print(f"\n  [{dim}] Generating {count} case(s) ...", file=sys.stderr)
-        cases = generate_for_dimension(dim, count, current_id, topics_text, client)
-        print(f"    → Got {len(cases)} case(s).", file=sys.stderr)
-        all_cases.extend(cases)
-        current_id += len(cases)
-        time.sleep(RATE_LIMIT_SLEEP)
+    all_cases = asyncio.run(run(summaries, dimensions, args.start_id))
 
     args.output.write_text(
         json.dumps(all_cases, indent=2, ensure_ascii=False), encoding="utf-8"
     )
-    print(
-        f"\nDone. {len(all_cases)} test case(s) written to {args.output}",
-        file=sys.stderr,
-    )
+    print(f"\n{len(all_cases)} test case(s) written to {args.output}", file=sys.stderr)
 
 
 if __name__ == "__main__":

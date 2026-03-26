@@ -1,0 +1,200 @@
+[
+  {
+    "id": "TC-020",
+    "dimension": "recall",
+    "memory_type": "semantic",
+    "project_scope": "hotdesk",
+    "setup_memory": "The workflow for the `update-spaces` command is defined in `/Users/tomas/git/hotdesk/.claude/commands/update-spaces.md`.",
+    "query": "Where is the workflow for the `update-spaces` command defined?",
+    "expected_answer": "/Users/tomas/git/hotdesk/.claude/commands/update-spaces.md",
+    "scoring_method": "exact_contains",
+    "notes": "Tests recall of a specific file path for a command's workflow definition."
+  },
+  {
+    "id": "TC-021",
+    "dimension": "recall",
+    "memory_type": "episodic",
+    "project_scope": "hotdesk",
+    "setup_memory": "Direct access to the WeWork DRN URL `https://www.wework.com/buildings/drn--prague` was blocked.",
+    "query": "What happened when I tried to access the WeWork DRN URL directly?",
+    "expected_answer": "It was blocked.",
+    "scoring_method": "exact_contains",
+    "notes": "Tests recall of a specific past event (blocked URL access)."
+  },
+  {
+    "id": "TC-022",
+    "dimension": "recall",
+    "memory_type": "preference",
+    "project_scope": "hotdesk",
+    "setup_memory": "The user prefers that pre-commit hooks run only fast checks; the full test suite runs separately via `bin/ci`.",
+    "query": "What is the design philosophy for pre-commit hooks?",
+    "expected_answer": "To run only fast checks; the full test suite runs separately via `bin/ci`.",
+    "scoring_method": "llm_judge",
+    "notes": "Tests recall of a user's preference regarding development workflow and testing."
+  },
+  {
+    "id": "TC-023",
+    "dimension": "recall",
+    "memory_type": "goal",
+    "project_scope": "hotdesk",
+    "setup_memory": "The primary goal of the session was to scrape 7 independent coworking space websites for pricing and amenity changes as of 2026-03-01.",
+    "query": "What was the primary goal of the last session?",
+    "expected_answer": "To scrape 7 independent coworking space websites for pricing and amenity changes.",
+    "scoring_method": "llm_judge",
+    "notes": "Tests recall of a high-level objective from a past session."
+  },
+  {
+    "id": "TC-024",
+    "dimension": "hallucination",
+    "memory_type": "_",
+    "project_scope": "hotdesk",
+    "setup_memory": "(no memory about user authentication system)",
+    "query": "How do users log in to the hotdesk application?",
+    "expected_answer": "I don't know / no info available",
+    "scoring_method": "llm_judge_negation",
+    "notes": "Tests anti-hallucination regarding unmentioned core application features like user authentication."
+  },
+  {
+    "id": "TC-025",
+    "dimension": "hallucination",
+    "memory_type": "_",
+    "project_scope": "hotdesk",
+    "setup_memory": "(no memory about the production database type)",
+    "query": "What type of database does the hotdesk application use in production?",
+    "expected_answer": "I don't know / no info available",
+    "scoring_method": "llm_judge_negation",
+    "notes": "Tests anti-hallucination regarding unmentioned infrastructure details, specifically the production database type beyond the development SQLite."
+  },
+  {
+    "id": "TC-026",
+    "dimension": "hallucination",
+    "memory_type": "_",
+    "project_scope": "hotdesk",
+    "setup_memory": "(no memory about specific CI/CD pipeline tools)",
+    "query": "Which CI/CD pipeline tool is used for deploying the hotdesk application?",
+    "expected_answer": "I don't know / no info available",
+    "scoring_method": "llm_judge_negation",
+    "notes": "Tests anti-hallucination regarding unmentioned development workflow tools beyond basic GitHub builds."
+  },
+  {
+    "id": "TC-027",
+    "dimension": "scale",
+    "memory_type": "semantic",
+    "project_scope": "hotdesk",
+    "setup_memory": "(100 memories loaded)",
+    "query": "What is the designated tool for website scraping?",
+    "expected_answer": "bin/fetch",
+    "scoring_method": "exact_contains",
+    "notes": "Test recall quality for a core project tool at 100 memories."
+  },
+  {
+    "id": "TC-028",
+    "dimension": "scale",
+    "memory_type": "semantic",
+    "project_scope": "hotdesk",
+    "setup_memory": "(1000 memories loaded)",
+    "query": "What is the designated tool for website scraping?",
+    "expected_answer": "bin/fetch",
+    "scoring_method": "exact_contains",
+    "notes": "Test recall quality for a core project tool at 1000 memories."
+  },
+  {
+    "id": "TC-029",
+    "dimension": "proactive",
+    "memory_type": "episodic",
+    "project_scope": "hotdesk",
+    "setup_memory": "The initial SSH connection attempt to 10.0.0.103 for user 'claw' failed because the provided password 'openopen' was rejected. This failure is currently blocking further SSH security tests (2-5).",
+    "query": "I'm trying to run the SSH security tests on 10.0.0.103, but I can't connect. It keeps saying password rejected.",
+    "expected_answer": "Should proactively recall the previous SSH connection failure with 'openopen' password and mention that further tests are blocked until the password issue is resolved or a new password is provided.",
+    "scoring_method": "llm_judge",
+    "notes": "Tests proactive recall of a specific episodic failure that is blocking a current goal."
+  },
+  {
+    "id": "TC-030",
+    "dimension": "proactive",
+    "memory_type": "semantic",
+    "project_scope": "hotdesk",
+    "setup_memory": "Regus and Spaces websites use JavaScript rendering, which prevents static fetching. The `bin/fetch` tool with the `--scrappey` flag is required to successfully scrape content from JavaScript-rendered web pages.",
+    "query": "I'm trying to scrape pricing data from a Regus location page, but the `bin/fetch` command returns almost no content. It seems like the page is empty.",
+    "expected_answer": "Should proactively suggest that Regus websites are JavaScript-rendered and recommend using `bin/fetch` with the `--scrappey` flag to get the content.",
+    "scoring_method": "llm_judge",
+    "notes": "Tests proactive application of semantic knowledge about tool usage for a common problem (JS-rendered sites)."
+  },
+  {
+    "id": "TC-031",
+    "dimension": "proactive",
+    "memory_type": "semantic",
+    "project_scope": "hotdesk",
+    "setup_memory": "The `bin/fetch` tool, by default, strips HTML and converts it to markdown, making it unsuitable for directly extracting image tags. To preserve HTML with image tags, the `--simplify-html` option can be used with `bin/fetch`.",
+    "query": "I'm trying to get image URLs from a website using `bin/fetch`, but the output doesn't contain any `<img>` tags. I need to see the raw HTML with images.",
+    "expected_answer": "Should proactively explain that `bin/fetch` strips HTML by default and suggest using the `--simplify-html` option to preserve image tags.",
+    "scoring_method": "llm_judge",
+    "notes": "Tests proactive recall of tool-specific options to overcome a default limitation for a common task."
+  },
+  {
+    "dimension": "temporal",
+    "memory_type": "semantic",
+    "project_scope": "hotdesk",
+    "setup_memory": "Previously, the decision rule for using --scrappey was based on detecting 'just thin content'. Updated to 'look for SPA signals, not just thin content'.",
+    "query": "What is the current decision rule for when to use the --scrappey flag?",
+    "expected_answer": "Look for SPA signals, not just thin content (previous rule was based on thin content detection).",
+    "scoring_method": "llm_judge",
+    "notes": "Temporal - Scrappey usage rule evolution",
+    "id": "TC-032"
+  },
+  {
+    "dimension": "temporal",
+    "memory_type": "episodic",
+    "project_scope": "hotdesk",
+    "setup_memory": "The Day Pass price for Scott.Weber standard locations was 900 CZK. It changed to 650 CZK.",
+    "query": "What is the current Day Pass price for Scott.Weber standard locations?",
+    "expected_answer": "650 CZK (previously 900 CZK)",
+    "scoring_method": "llm_judge",
+    "notes": "Temporal - pricing data change",
+    "id": "TC-033"
+  },
+  {
+    "dimension": "temporal",
+    "memory_type": "semantic",
+    "project_scope": "hotdesk",
+    "setup_memory": "Initially only checked image reachability. Later evolved to downloading and storing images locally as assets.",
+    "query": "How are images currently handled in the hotdesk project?",
+    "expected_answer": "Downloaded and stored locally as assets (previously only checked reachability).",
+    "scoring_method": "llm_judge",
+    "notes": "Temporal - image handling strategy change",
+    "id": "TC-034"
+  },
+  {
+    "dimension": "temporal",
+    "memory_type": "semantic",
+    "project_scope": "hotdesk",
+    "setup_memory": "Email addresses were initially stored in the notes field of YAML files. A new top-level email field was added.",
+    "query": "Where are email addresses stored in the coworking space YAML files?",
+    "expected_answer": "In a top-level email field (previously buried in the notes field).",
+    "scoring_method": "llm_judge",
+    "notes": "Temporal - YAML structure evolution",
+    "id": "TC-035"
+  },
+  {
+    "dimension": "type_distinction",
+    "memory_type": "preference+episodic",
+    "project_scope": "hotdesk",
+    "setup_memory": "Preference: User prefers bin/fetch for scraping and explicitly forbids WebFetch. Episodic: When Google searches via bin/fetch --scrappey hit a 302 redirect, WebSearch was used as an alternative.",
+    "query": "What is the preferred tool for website scraping, and are there any forbidden tools?",
+    "expected_answer": "bin/fetch is preferred, WebFetch is forbidden (WebSearch was used once as exception for Google 302 redirects).",
+    "scoring_method": "llm_judge",
+    "notes": "Type distinction - tool preference vs one-off workaround",
+    "id": "TC-036"
+  },
+  {
+    "dimension": "type_distinction",
+    "memory_type": "preference+episodic",
+    "project_scope": "hotdesk",
+    "setup_memory": "Preference: High data quality is non-negotiable; accuracy and verification are always prioritized. Episodic: During a bulk update, image reachability checks were skipped to save time.",
+    "query": "What is the approach to data quality in the hotdesk project?",
+    "expected_answer": "High data quality is non-negotiable and always prioritized (skipping image checks during bulk update was a one-time exception).",
+    "scoring_method": "llm_judge",
+    "notes": "Type distinction - quality principle vs pragmatic exception",
+    "id": "TC-037"
+  }
+]
