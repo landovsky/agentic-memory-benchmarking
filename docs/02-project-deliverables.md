@@ -1,5 +1,84 @@
 # Project Deliverables
 
+## Testing
+
+### Prerequisites
+
+- Docker services running (`docker compose up -d`, verify with `docker compose ps`)
+- Python venv activated (`source .venv/bin/activate`)
+- LiteLLM proxy reachable at `http://localhost:4000` (routes to Vertex AI)
+- Facts loaded into the target memory system (see Ingestion above)
+
+### 1. Load test data
+
+Load facts into the memory system you want to evaluate. Only needed once per system (or after wiping its storage).
+
+```bash
+# Graphiti (Neo4j)
+python data-loaders/load_graphiti.py --facts shared-data/test-data/facts_test.json --group-id hackathon
+
+# Mem0 (Qdrant)
+python data-loaders/load_mem0.py --facts shared-data/test-data/facts_test.json --host localhost
+
+# Dry run (any loader) — shows what would be loaded without writing
+python data-loaders/load_graphiti.py --facts shared-data/test-data/facts_test.json --dry-run
+```
+
+### 2. Run the eval harness
+
+```bash
+# Single system — smoke tests (3 cases, fast)
+python eval-harness/runner.py --system graphiti \
+  --test-cases shared-data/test-cases/test_cases_smoke.csv \
+  --runner-name <your-name>
+
+# Single system — full suite (10 cases)
+python eval-harness/runner.py --system graphiti \
+  --test-cases shared-data/test-cases/test_cases.csv \
+  --runner-name <your-name>
+
+# All systems sequentially
+python eval-harness/runner.py --system all --runner-name <your-name>
+```
+
+Each test case is queried against the memory system, scored, and saved to PostgreSQL. Terminal output shows per-case scores and a summary table with averages.
+
+### 3. Review results
+
+**HTML report** — color-coded pivot table (systems as columns, test cases as rows):
+
+```bash
+python eval-harness/report.py --output report.html
+xdg-open report.html
+```
+
+**PostgreSQL direct query:**
+
+```bash
+psql -h localhost -U hackathon -d eval_results -c \
+  "SELECT system_name, test_case_id, score, latency_ms, actual_answer
+   FROM eval_runs ORDER BY run_timestamp DESC;"
+```
+
+Password: `hackathon2025`
+
+### Scoring methods
+
+Defined per test case in the CSV `scoring_method` column:
+
+| Method | What it does |
+|--------|-------------|
+| `exact_contains` | 1.0 if expected answer is a substring of actual (case-insensitive), 0.0 otherwise |
+| `llm_judge` | LLM scores 0.0–1.0 how well the actual response answers the query given the expected answer |
+| `llm_judge_negation` | 1.0 if the system correctly refuses (says it doesn't know), 0.0 if it hallucinated |
+
+### Test case files
+
+| File | Cases | Purpose |
+|------|-------|---------|
+| `shared-data/test-cases/test_cases_smoke.csv` | 3 | Quick validation — recall + isolation |
+| `shared-data/test-cases/test_cases.csv` | 10 | Full suite — recall, temporal, isolation, hallucination, proactive, scale, type distinction |
+
 ## Agentic system memory integration
 
 ### MCP Tool Interfaces

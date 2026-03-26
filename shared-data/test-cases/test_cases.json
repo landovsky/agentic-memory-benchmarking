@@ -108,5 +108,104 @@
     "expected_answer": "Tailwind (i když včera použil Bootstrap - to byla výjimka)",
     "scoring_method": "llm_judge",
     "notes": "Rozlišení preference vs. epizodická"
+  },
+  {
+    "id": "TC-011",
+    "dimension": "recall",
+    "memory_type": "semantic",
+    "project_scope": "global",
+    "setup_memory": "Token se nikdy nepředává jako parametr metod BackendAPIService. Vždy se získává interně přes tokenStorage.getAccessToken().",
+    "query": "I'm adding a new method to BackendAPIService. Should I add an optional token?: string parameter to pass it from the UI?",
+    "expected_answer": "No - must retrieve token internally via tokenStorage.getAccessToken(). Token parameters in service methods are a forbidden anti-pattern.",
+    "scoring_method": "llm_judge",
+    "notes": "Golden set - coding guideline recall"
+  },
+  {
+    "id": "TC-012",
+    "dimension": "recall",
+    "memory_type": "semantic",
+    "project_scope": "global",
+    "setup_memory": "/users/signup endpoint je deprecated. Všechny flows (Social/Email) musí používat BackendAPIService.login() který volá /auth/login.",
+    "query": "For social sign-in, should I check if the user exists via /users/signup before logging them in?",
+    "expected_answer": "No - /users/signup is deprecated. All flows must use BackendAPIService.login() which hits /auth/login.",
+    "scoring_method": "llm_judge",
+    "notes": "Golden set - deprecated endpoint recall"
+  },
+  {
+    "id": "TC-013",
+    "dimension": "recall",
+    "memory_type": "semantic",
+    "project_scope": "global",
+    "setup_memory": "Pro status fieldy nepoužívat PostgreSQL ENUM. Používat CHECK constraint + centralizované konstanty v app/constants.py kvůli jednodušším migracím.",
+    "query": "I'm adding a subscription_status field. Should I use a PostgreSQL ENUM for 'ACTIVE' and 'EXPIRED'?",
+    "expected_answer": "No - use CHECK constraint + centralized constants in app/constants.py. Avoid PG ENUMs for easier migrations.",
+    "scoring_method": "llm_judge",
+    "notes": "Golden set - DB convention recall"
+  },
+  {
+    "id": "TC-014",
+    "dimension": "recall",
+    "memory_type": "semantic",
+    "project_scope": "global",
+    "setup_memory": "Pro update záznamů family_member se musí použít row-level lock (with_for_update()) přes get_locked_family_member_by_id() repository metodu.",
+    "query": "I need to update a family_member record. Is it okay to just fetch the row and save the changes?",
+    "expected_answer": "No - must use row-level lock (with_for_update()) via get_locked_family_member_by_id() repository method.",
+    "scoring_method": "llm_judge",
+    "notes": "Golden set - concurrency pattern recall"
+  },
+  {
+    "id": "TC-015",
+    "dimension": "recall",
+    "memory_type": "semantic",
+    "project_scope": "global",
+    "setup_memory": "Repo funkce nevolají db.commit(). Používá se commit=False pattern. Transakci řídí vnější service/router; repo používá db.flush() pokud je potřeba.",
+    "query": "I'm writing a repo function called by a service. Should I call db.commit() at the end of the function?",
+    "expected_answer": "No - use commit=False pattern. The outer service/router manages the transaction; repo should use db.flush() if needed.",
+    "scoring_method": "llm_judge",
+    "notes": "Golden set - transaction pattern recall"
+  },
+  {
+    "id": "TC-016",
+    "dimension": "recall",
+    "memory_type": "semantic",
+    "project_scope": "global",
+    "setup_memory": "Deduplikace AI image generation se nedělá přes volný text. Používat natural-key idempotency - identifikátory jako story_content_id nebo explicitní correlation ID.",
+    "query": "How should I deduplicate requests for AI image generation to make sure we don't run the same prompt twice?",
+    "expected_answer": "Natural-key idempotency - do NOT deduplicate by free text; use identifiers like story_content_id or correlation ID.",
+    "scoring_method": "llm_judge",
+    "notes": "Golden set - idempotency pattern recall"
+  },
+  {
+    "id": "TC-017",
+    "dimension": "recall",
+    "memory_type": "semantic",
+    "project_scope": "global",
+    "setup_memory": "Nezachycovat layout konstanty při načtení modulu (Dimensions.get at top level). Používat useWindowDimensions() hook.",
+    "query": "Can I define const { width } = Dimensions.get('window') at the top of my component file for styling?",
+    "expected_answer": "Anti-pattern - do not capture layout constants at module load. Use useWindowDimensions() hook instead.",
+    "scoring_method": "llm_judge",
+    "notes": "Golden set - React Native pattern recall"
+  },
+  {
+    "id": "TC-018",
+    "dimension": "recall",
+    "memory_type": "semantic",
+    "project_scope": "global",
+    "setup_memory": "UI stringy se přidávají nejdřív do TSV souboru (translation-strings.tsv) jako source of truth, teprve potom do en.json a cs.json.",
+    "query": "I have a new UI string. I'll add it to en.json and cs.json now. Is there anything else?",
+    "expected_answer": "Must add to translation-strings.tsv first as source of truth before editing JSONs.",
+    "scoring_method": "llm_judge",
+    "notes": "Golden set - i18n workflow recall"
+  },
+  {
+    "id": "TC-019",
+    "dimension": "recall",
+    "memory_type": "semantic",
+    "project_scope": "global",
+    "setup_memory": "Pro custom error responses nepoužívat vlastní JSON formát. Použít FastAPI exception handlers a RFC 7807 (Problem model) formát. Handler se registruje v main.py.",
+    "query": "I want to return a custom JSON error like {'error': 'msg'} for a specific validation failure. Is that okay?",
+    "expected_answer": "No - use FastAPI exception handlers and RFC 7807 (Problem model) format. Register handler in main.py.",
+    "scoring_method": "llm_judge",
+    "notes": "Golden set - error handling pattern recall"
   }
 ]
