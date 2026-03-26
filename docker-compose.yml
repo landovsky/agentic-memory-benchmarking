@@ -101,6 +101,7 @@ services:
       OPENAI_API_KEY: sk-not-needed
       SEMAPHORE_LIMIT: "10"
       CONFIG_PATH: /app/mcp/config/config.yaml
+      GRAPHITI_GROUP_ID: hotdesk
     volumes:
       - ./graphiti-config.yaml:/app/mcp/config/config.yaml:ro
     depends_on:

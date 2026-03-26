@@ -122,6 +122,116 @@ python -m eval_harness run --system all --runner your_name
 
 ---
 
+## Graphiti Memory Bench (TypeScript standalone)
+
+`graphiti-memory-bench/` je samostatný TypeScript monorepo pro ingest Claude Code sessions a evaluaci Graphiti paměti. Lze spustit nezávisle na Python harnessu.
+
+### Požadavky
+
+- Node.js ≥ 22
+- pnpm ≥ 9 (`npm install -g pnpm`)
+- Docker + Docker Compose
+
+### 1. Spusť infrastrukturu
+
+```bash
+cd graphiti-memory-bench/infra
+cp .env.example ../.env   # nebo viz níže
+```
+
+Vytvoř `.env` v `graphiti-memory-bench/`:
+
+```env
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=hackathon2025
+
+POSTGRES_URL=postgres://hackathon:hackathon2025@localhost:5432/eval
+
+GRAPHITI_MCP_URL=http://localhost:8050
+
+ANTHROPIC_API_KEY=sk-ant-...          # pro scoring
+GOOGLE_APPLICATION_CREDENTIALS_JSON='{"type":"service_account",...}'  # GCP SA pro Gemini/Vertex AI
+
+RUNNER_NAME=your_name
+```
+
+```bash
+docker compose up -d   # spustí Neo4j, LiteLLM proxy, Graphiti MCP, PostgreSQL
+docker compose ps      # ověř healthy stav
+```
+
+### 2. Sestav projekt
+
+```bash
+cd graphiti-memory-bench
+pnpm install
+pnpm build
+```
+
+### 3. Nakonfiguruj MCP v Claude Code
+
+```bash
+claude mcp add --transport http graphiti http://localhost:8050/mcp
+claude mcp list   # měl bys vidět: graphiti ✓ Connected
+```
+
+### 4. Ingestuj Claude Code sessions
+
+```bash
+# Jeden soubor
+pnpm ingest -- --file /path/to/session.jsonl --group-id global
+
+# Celý adresář (rekurzivně)
+pnpm ingest -- --dir ~/.claude/projects/ --group-id global
+
+# Náhled bez zápisu
+pnpm ingest -- --dir ./data/sessions/ --dry-run
+```
+
+JSONL soubory jsou ve formátu Claude Code (`~/.claude/projects/<hash>/<session-id>.jsonl`).
+
+### 5. Spusť evaluaci
+
+```bash
+# Všechny test cases
+pnpm eval -- run --runner your_name --group-id global
+
+# Filtrovat dimenze nebo priority
+pnpm eval -- run --runner your_name --dimension recall,temporal --priority critical,high
+
+# Vygeneruj HTML report (čte z PostgreSQL)
+pnpm eval -- report --output ./reports/report.html
+```
+
+### Struktura
+
+```
+graphiti-memory-bench/
+├── packages/
+│   ├── shared/      # GraphitiClient (MCP), typy, DB utils, scorers
+│   ├── ingest/      # CLI: parsuje JSONL → posílá episodes do Graphiti
+│   └── eval/        # CLI: spouští test cases, skóruje, ukládá do PG
+├── infra/
+│   ├── docker-compose.yml     # Neo4j, LiteLLM proxy, Graphiti MCP, PG
+│   ├── graphiti-config.yaml   # Graphiti: LLM + embedder přes LiteLLM
+│   └── litellm-config.yaml    # LiteLLM: Vertex AI Gemini 2.5 Flash + embeddings
+├── data/
+│   ├── test-cases/            # test_cases.json (19 případů)
+│   └── sessions/              # ukázkové JSONL sessions
+└── .env.example
+```
+
+### Klíčové detaily
+
+- **MCP transport**: `StreamableHTTPClientTransport` na `/mcp` (ne SSE)
+- **add_memory je asynchronní** — extrakce entit probíhá na pozadí; po ingestu čekej ~2s
+- **LiteLLM proxy** → Vertex AI Gemini 2.5 Flash (LLM) + text-embedding-004 (embeddings)
+- **`GOOGLE_APPLICATION_CREDENTIALS_JSON`** — celý JSON GCP service accountu jako string (ne cesta k souboru)
+- **group_id** odděluje paměti různých projektů nebo runnerů
+
+---
+
 ## Struktura projektu
 
 ```
