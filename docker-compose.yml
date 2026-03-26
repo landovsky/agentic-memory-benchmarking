@@ -77,6 +77,8 @@ services:
       EMBEDDER_PROVIDER: vertexai
       GOOGLE_APPLICATION_CREDENTIALS: /credentials/gcp-sa.json
       QDRANT_URL: http://qdrant:6333
+      OPENAI_API_KEY: dummy
+      OPENAI_BASE_URL: http://litellm-proxy:4000
     volumes:
       - ./credentials/gcp-sa.json:/credentials/gcp-sa.json:ro
     depends_on:
