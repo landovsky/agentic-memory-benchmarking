@@ -90,60 +90,96 @@ The canonical input is a set of **conversation segments** — chunks of real Cla
 
 ### Pipeline overview
 
+The ingestion pipeline mimics how an agentic platform would store memories in real life: whole conversation messages are sent to the memory system, which handles extraction internally. We only strip JSONL noise — no pre-extraction of facts.
+
 ```
 Real CC sessions (JSONL)
         │
         ▼
-┌──────────────────┐
-│  jsonl_parser.py │  Parse JSONL → structured conversations
-└────────┬─────────┘
-         │  sessions.json (list of {session_id, messages[], timestamps})
-         ▼
-┌────────────────────────┐
-│  memory_extractor.py   │  Claude extracts memory-worthy facts
-└────────┬───────────────┘  (preference / episodic / semantic / goal)
-         │  facts.json (list of {fact, type, project, confidence, timestamp})
+┌───────────────────────────┐
+│  Strip & Filter           │  Drop: progress messages, tool_result content,
+│  (jsonl_parser.py)        │        tool_use blocks
+│                           │  Keep: user prompt strings,
+│                           │        assistant text blocks
+│                           │  Preserve: timestamps, parentUuid ordering,
+│                           │            session metadata
+└────────┬──────────────────┘
+         │  Clean conversation messages (user/assistant dialogue only)
          ▼
    ┌─────┼──────┐
    ▼     ▼      ▼
  Mem0  Graphiti  Cognee    (system-specific loaders)
 ```
 
+Each message (user prompt or assistant text response) is sent as-is to the memory system. The memory system decides what's worth remembering — that's part of what we're benchmarking.
+
 ### System-specific ingestion
 
-Each loader reads `facts.json` but adapts the data for its system:
+Each loader sends cleaned conversation messages via the system's native interface:
 
-**Mem0** (`load_mem0.py`)
-- Calls `Memory.add()` from the `mem0` Python SDK — one call per fact.
-- Each fact is wrapped as `[{"role": "user", "content": fact_text}]` with metadata `{type, project}`.
-- Facts below a confidence threshold (default 0.5) are filtered out.
-- This matches how the MCP `add_memories` tool works internally.
+**Graphiti** — Feed each message as an episode with `source="message"`. Graphiti extracts entities, builds relationships, and handles temporal tracking internally.
 
-**Graphiti** (`load_graphiti.py`)
-- Calls `Graphiti.add_episode()` from `graphiti-core` — one call per fact.
-- Each fact becomes an episode with `source=EpisodeType.text`, a `reference_time` parsed from the fact's timestamp, and a `group_id` for namespace isolation.
-- Graphiti then internally extracts entities, builds relationships, and handles deduplication.
-- Rate-limited with a 200ms sleep between episodes.
+**Cognee** — Feed messages via `save_interaction()` (for user-agent Q&A pairs) or `cognify()` (for longer text). Cognee runs its full pipeline: chunking, entity extraction, graph construction.
 
-**Cognee** (`load_cognee.py`)
-- Groups facts by project into separate datasets (e.g., `hackathon_medicmee`, `hackathon_hristehrou`).
-- Joins all facts in a group into a single text blob and calls `cognee.add()` + `cognee.cognify()` per dataset.
-- Cognify runs the full pipeline: chunking, entity extraction, graph construction, summarization.
+**Mem0** — Feed each message via `Memory.add()` with `infer=True`. Mem0's LLM extracts facts from the text. This is the closest analogue to how `add_memories` works via MCP.
 
-### What the current pipeline does NOT do
+### TODO
 
-The current loaders feed **pre-extracted facts** (output of `memory_extractor.py`) to all three systems. This means Graphiti and Cognee receive already-digested single-sentence facts rather than the conversation chunks they are designed to process. This is a known limitation:
+- [ ] Update `jsonl_parser.py` to strip tool_use blocks from assistant messages (currently keeps all content blocks). Output should be clean user/assistant dialogue only.
+- [ ] Rewrite `load_graphiti.py` to send conversation messages as `source="message"` episodes instead of pre-extracted facts.
+- [ ] Rewrite `load_cognee.py` to use `save_interaction()` for Q&A pairs instead of joining facts into text blobs.
+- [ ] Update `load_mem0.py` to send conversation messages with `infer=True` instead of pre-extracted facts.
+- [ ] Decide on message granularity: one message per API call vs. batching user+assistant pairs as a single episode.
+- [ ] Handle secrets — ensure `strip-claude-secrets.py` runs before ingestion (tool_result stripping helps, but user prompts can also contain secrets).
 
-- **Graphiti** supports `source="message"` episodes — it could receive raw conversation segments and extract entities/relations itself.
-- **Cognee** has `save_interaction()` specifically for user-agent Q&A pairs, and `cognify()` can handle full text blobs.
-- **Mem0** is the only system where pre-extracted facts are the natural input format.
+---
 
-### Planned improvement: conversation-native ingestion
+## Golden dataset
 
-To benchmark each system fairly, the loaders should be updated to:
+The golden dataset is a curated set of test queries with known expected answers, used by the eval harness to score each memory system. It is produced from the same stripped sessions used for ingestion.
 
-1. **Mem0**: Keep current approach — feed individual facts via `Memory.add()` with `infer=True` for slightly longer context.
-2. **Graphiti**: Feed conversation segments as episodes with `source="message"`, letting Graphiti do its own entity extraction.
-3. **Cognee**: Feed conversation segments via the `cognify()` or `save_interaction()` path, letting Cognee run its full pipeline.
+### Curation process
 
-This way each system is tested on its actual designed intake, not on a pre-digested common denominator.
+```
+Stripped sessions (clean dialogue)
+        │
+        ▼
+┌───────────────────────────────┐
+│  Claude curates               │  Explores sessions, identifies topics
+│                               │  that cover the benchmark dimensions:
+│                               │  recall, temporal, isolation,
+│                               │  hallucination, proactive, scale,
+│                               │  type distinction
+└────────┬──────────────────────┘
+         │  Candidate topics + lines of enquiry
+         ▼
+┌───────────────────────────────┐
+│  Claude generates test cases  │  For each topic, generates:
+│                               │  - query (what to ask the system)
+│                               │  - expected answer
+│                               │  - dimension + memory type tags
+│                               │  - scoring method
+│                               │  - source session reference
+└────────┬──────────────────────┘
+         │  golden_dataset.json (draft)
+         ▼
+┌───────────────────────────────┐
+│  Human review                 │  Verify expected answers are correct,
+│                               │  adjust scoring methods, remove
+│                               │  ambiguous cases
+└────────┬──────────────────────┘
+         │  golden_dataset.json (final) → shared-data/test-cases/
+         ▼
+       Eval harness
+```
+
+The output format matches the existing `test_cases.json` schema: `{id, dimension, memory_type, project_scope, setup_memory, query, expected_answer, scoring_method, notes}`.
+
+### TODO
+
+- [ ] Pick a project with sufficient session history (medium size — not the largest, to control token cost).
+- [ ] Run strip & filter on its sessions to produce clean dialogue transcripts.
+- [ ] Have Claude explore transcripts and propose candidate topics per benchmark dimension.
+- [ ] Have Claude generate test cases from approved topics.
+- [ ] Human review and finalize the golden dataset.
+- [ ] Replace or extend `shared-data/test-cases/test_cases.json` with the curated dataset.
