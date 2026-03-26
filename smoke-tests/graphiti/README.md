@@ -29,7 +29,16 @@ The scripts read `.env` from `smoke-tests/graphiti/.env` (via `python-dotenv`). 
 ln -sf ../../.env .env
 ```
 
-## Running
+## Quick start
+
+```bash
+./run.sh              # smoke suite (3 cases): load → eval → report
+./run.sh --full       # full suite (10 cases)
+./run.sh --skip-load  # skip loading if facts are already in Neo4j
+./run.sh --dry-run    # preview what would be loaded
+```
+
+## Running step by step
 
 ### Step 1: Load facts into Graphiti
 
