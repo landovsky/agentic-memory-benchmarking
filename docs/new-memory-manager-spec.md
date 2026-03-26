@@ -290,6 +290,49 @@ The `infra/docker-compose.yml` sets these to the in-Docker service hostnames; ru
 
 ---
 
+## Implementation Learnings from Current Codebase
+
+Findings from a sweep of the existing Python implementation that the TypeScript rewrite should not have to rediscover.
+
+### JSONL Parsing
+
+- **Content format is not uniform.** User messages have `content` as a plain string. Assistant messages have `content` as an array of blocks, each with `type` and `text`. Only extract blocks where `type === "text"` — other types (tool use, images) should be dropped.
+- **System noise must be filtered.** Claude Code injects internal framework messages that should not be ingested. Skip any message whose content starts with: `<local-command-caveat>`, `<command-name>`, `<command-message>`, `<task-notification>`, `[Request interrupted`.
+- **Project hash lives in the file path.** The path pattern is `~/.claude/projects/{project_hash}/{session_id}.jsonl`. Parse it from the path; don't expect it in the data.
+
+### Ingestion
+
+- **Truncate long messages** to ~4000 characters before building the episode body. Longer messages can cause issues downstream. Append `\n[truncated]` so it's visible in the graph.
+- **Episode body format matters for extraction quality.** Format messages as `[role]: content\n\n` (double newline between messages). Graphiti's LLM extractor is sensitive to this structure.
+- **Rate-limit between episodes.** A ~200ms sleep between `addEpisode` calls prevents overwhelming Neo4j during bulk ingestion.
+- **`build_indices_and_constraints` must be called once** before the first episode is added. Without it queries are slow or incorrect. It is safe to call on every startup (idempotent).
+- **Use `project_hash` as `group_id`** — this gives natural per-project isolation for free.
+
+### Graphiti Search
+
+- **Two distinct search modes with different response shapes:**
+  - Facts (default): omit `search_type`. Returns edge objects with a `.fact` string. Join with `" | "`.
+  - Nodes: pass `search_type: "node"`. Returns node objects with `.name` and `.summary` (summary can be null).
+- **`group_ids` is required on every search call** — without it results are unscoped and cross-project.
+- **Handle empty results explicitly.** Return a `"No results"` string rather than null/undefined; the scorer expects a string.
+- **num_results:** 3 is a reasonable default for eval queries; 10 for exploratory/MCP use.
+
+### Scoring
+
+- **LLM judge responses are freeform.** The model may return `"0.85"`, `"Score: 0.85"`, or a sentence. Use a regex like `/[0-9]+\.?[0-9]*/` to extract the first number, then clamp to `[0.0, 1.0]`. Default to `0.0` on parse failure.
+- **Negation scoring is binary**, not continuous. The prompt asks the model to return exactly `1.0` (correct refusal) or `0.0` (hallucination). Still extract via regex and clamp for robustness.
+- **`llm_judge_negation` ignores `expected_answer`** — the expected behaviour is always "system should say it doesn't know."
+
+### Infrastructure
+
+- **`GOOGLE_APPLICATION_CREDENTIALS_JSON` is a JSON string, not a file path.** LiteLLM needs it as a mounted file at `/credentials/gcp-sa.json`. The Docker Compose setup must write the env var to a file via an entrypoint script or init container — it cannot be passed directly as an env var to LiteLLM.
+- **LiteLLM config is a static YAML file.** It does not interpolate environment variables. `vertex_project` and `vertex_location` must be edited directly in `graphiti-config.yaml` / `litellm-config.yaml` before deploying.
+- **Neo4j takes >30 seconds to be Bolt-ready.** The Docker health check only checks the HTTP port (7474), not Bolt (7687). The Graphiti MCP container should have a `depends_on: condition: service_healthy` on Neo4j, and callers should expect initial connection retries.
+- **Graphiti MCP has a concurrency cap (`SEMAPHORE_LIMIT: 10`).** Running more than 10 parallel eval queries will queue. Keep eval concurrency ≤ 10 or raise the limit explicitly.
+- **Use a single consistent credential for PostgreSQL.** The old codebase had a mismatch between the Docker-configured user (`hackathon`) and the hardcoded runner user (`postgres`). Pick one and use it everywhere via env var.
+
+---
+
 ## Open / Deferred
 
 - **Async background ingestion** — file watcher on `data/sessions/` that auto-ingests dropped files (deferred)
