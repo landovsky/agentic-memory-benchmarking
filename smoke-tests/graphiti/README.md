@@ -2,6 +2,88 @@
 
 Working smoke test of the eval harness against Graphiti (Neo4j). This was the first end-to-end run and contains fixes not yet ported to the main repo.
 
+## Prerequisites
+
+- Docker services running on the host machine (`docker compose up -d` from repo root)
+- Neo4j reachable at `localhost:7687` (or `HOST_IP:7687`)
+- PostgreSQL reachable at `localhost:5432`
+- LiteLLM proxy reachable at `localhost:4000`
+- Python 3.11+ with venv
+
+## Setup
+
+```bash
+cd smoke-tests/graphiti
+
+# Create and activate venv
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install dependencies
+pip install -r eval-harness/requirements.txt
+
+# Configure environment
+cp .env.example .env
+# Fill in: GOOGLE_API_KEY, ANTHROPIC_API_KEY, VERTEX_PROJECT_ID
+# Adjust HOST_IP if services are on a remote machine
+```
+
+## Running
+
+### Step 1: Load facts into Graphiti
+
+```bash
+# Dry run — see what would be loaded
+python data-loaders/load_graphiti.py \
+  --facts shared-data/test-data/facts_test.json \
+  --dry-run
+
+# Load for real (5 facts into Neo4j via LiteLLM proxy)
+python data-loaders/load_graphiti.py \
+  --facts shared-data/test-data/facts_test.json \
+  --group-id hackathon
+```
+
+The loader uses LiteLLM proxy (`LITELLM_URL`, default `http://localhost:4000`) to route LLM calls. It patches Graphiti's OpenAI client to work with LiteLLM (which doesn't support the OpenAI Responses API).
+
+### Step 2: Run the eval harness
+
+```bash
+# Smoke test — 3 cases, fast
+python eval-harness/runner.py \
+  --system graphiti \
+  --test-cases shared-data/test-cases/test_cases_smoke.csv \
+  --runner-name <your-name>
+
+# Full suite — 10 cases
+python eval-harness/runner.py \
+  --system graphiti \
+  --test-cases shared-data/test-cases/test_cases.csv \
+  --runner-name <your-name>
+```
+
+Results are printed to terminal and saved to PostgreSQL (`eval_results.eval_runs` table).
+
+### Step 3: Generate HTML report
+
+```bash
+python eval-harness/report.py --output report.html
+```
+
+Open `report.html` in a browser — shows a color-coded pivot table (systems x dimensions) and detailed per-case results.
+
+### Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LITELLM_URL` | `http://localhost:4000` | LiteLLM proxy URL |
+| `NEO4J_HOST` | `localhost` | Neo4j host |
+| `NEO4J_PASSWORD` | `hackathon2025` | Neo4j password |
+| `POSTGRES_HOST` | `localhost` | PostgreSQL host |
+| `RUNNER_NAME` | `default` | Identifier stored with results |
+
+All can be overridden via `.env` or CLI flags (use `--help` on any script).
+
 ## Key differences from main repo
 
 | Area | Main repo | This smoke test |
