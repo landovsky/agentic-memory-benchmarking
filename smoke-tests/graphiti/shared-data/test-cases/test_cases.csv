@@ -1,0 +1,11 @@
+id,dimension,memory_type,project_scope,setup_memory,query,expected_answer,scoring_method,notes
+TC-001,recall,preference,global,"Uživatel preferuje Tailwind před Bootstrapem","Jaký CSS framework mám rád?","Tailwind",exact_contains,Základní preference recall
+TC-002,recall,semantic,medicmee,"MedicMee používá Rails 7.1 s PostgreSQL a Hotwire","Jaký tech stack používá MedicMee?","Rails 7.1, PostgreSQL, Hotwire",llm_judge,Semantická paměť - projektové fakta
+TC-003,temporal,semantic,hristehrou,"V lednu: HH používá Bootstrap. V březnu: Přešli na Tailwind.","Jaký CSS framework aktuálně používá Hřiště Hrou?","Tailwind (přešli z Bootstrap)",llm_judge,Temporal - rozpoznání aktualizace
+TC-004,isolation,preference,pharmacy,"Pharmacy: deploy přes K3s. MedicMee: deploy přes Dokku.","Jak deployujeme Pharmacy?","K3s",exact_contains,Izolace projektů
+TC-005,hallucination,_,global,"(žádná paměť o Reactu)","Jakou React verzi používám?","Nevím / nemám info",llm_judge_negation,Anti-halucinace - systém NEMÁ odpovídat
+TC-006,proactive,episodic,medicmee,"3. března: Řešili jsme timeout PostgreSQL - opraveno zvýšením pool size na 25","Mám problém s timeouty DB připojení v MedicMee","Měl by proaktivně zmínit předchozí řešení (pool size 25)",llm_judge,Proaktivní využití epizodické paměti
+TC-007,temporal,goal,hristehrou,"Q1: Cíl vydat HH ERP do konce Q2. Konec Q1: Posun cíle na Q3.","Kdy má být hotový HH ERP?","Q3 (původně Q2, posunuto)",llm_judge,Temporal - aktualizace cíle
+TC-008,scale,semantic,global,"(100 memories loaded)","Jaký je deployment postup pro MedicMee?","Dokku na VPS",exact_contains,Baseline - 100 záznamů
+TC-009,scale,semantic,global,"(1000 memories loaded)","Jaký je deployment postup pro MedicMee?","Dokku na VPS",exact_contains,Scale test - 1000 záznamů
+TC-010,type_distinction,"preference+episodic",global,"Preference: Rád používám Tailwind. Epizodická: Včera jsem musel použít Bootstrap kvůli legacy klientovi.","Jaký CSS framework preferuji?","Tailwind (i když včera použil Bootstrap - to byla výjimka)",llm_judge,Rozlišení preference vs. epizodická

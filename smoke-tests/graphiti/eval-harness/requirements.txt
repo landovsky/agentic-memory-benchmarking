@@ -1,0 +1,6 @@
+mem0ai>=0.1.0
+graphiti-core[openai]>=0.28.0
+cognee>=0.1.0
+openai>=1.0.0
+psycopg2-binary>=2.9.0
+python-dotenv>=1.0.0

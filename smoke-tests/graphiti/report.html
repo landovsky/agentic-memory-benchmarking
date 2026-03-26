@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Memory Benchmarking — Eval Results</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 2rem;
+      color: #222;
+    }
+    h1 { color: #333; }
+    h2 { color: #555; margin-top: 2rem; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-bottom: 1.5rem;
+      font-size: 0.85rem;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 6px 10px;
+      text-align: left;
+      word-break: break-word;
+    }
+    th {
+      background: #f0f0f0;
+      font-weight: bold;
+    }
+    tr:hover { background: #fafafa; }
+    .best { background: #d4edda !important; }
+  </style>
+</head>
+<body>
+  <h1>Memory Benchmarking — Evaluation Report</h1>
+  <p>Generated: 2026-03-26T11:47:23</p>
+
+  <h2>Summary — Average Score by System &times; Dimension</h2>
+  <p>Green cells = higher score. Highlighted rows in detail table = best score for that test case.</p>
+  
+<table>
+  <thead>
+    <tr>
+      <th>System</th>
+      <th>isolation</th><th>recall</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>graphiti</strong></td><td style="background:rgb(0,200,80)">1.000</td><td style="background:rgb(127,100,80)">0.500</td></tr>
+
+  </tbody>
+</table>
+
+  <h2>Detailed Results</h2>
+  
+<table>
+  <thead>
+    <tr>
+      <th>ID</th><th>Run at</th><th>Runner</th><th>System</th>
+      <th>Test case</th><th>Dimension</th><th>Query</th>
+      <th>Expected</th><th>Actual</th><th>Score</th>
+      <th>Latency ms</th><th>Method</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr style="background:#d4edda;"><td>1</td><td>2026-03-26 11:47:10</td><td>tomas</td><td>graphiti</td><td>TC-001</td><td>recall</td><td>Jaký CSS framework mám rád?</td><td>Tailwind</td><td>Uživatel preferuje Tailwind před Bootstrapem. | PostgreSQL je hlavní databáze pro všechny projekty. | Uživatel preferuje PostgreSQL.</td><td>1.000</td><td>1033</td><td>exact_contains</td></tr>
+<tr style="background:#d4edda;"><td>2</td><td>2026-03-26 11:47:11</td><td>tomas</td><td>graphiti</td><td>TC-002</td><td>recall</td><td>Jaký tech stack používá MedicMee?</td><td>Rails 7.1, PostgreSQL, Hotwire</td><td>MedicMee uses PostgreSQL. | MedicMee is deployed on VPS. | MedicMee uses Hotwire.</td><td>0.000</td><td>323</td><td>llm_judge</td></tr>
+<tr style="background:#d4edda;"><td>3</td><td>2026-03-26 11:47:12</td><td>tomas</td><td>graphiti</td><td>TC-004</td><td>isolation</td><td>Jak deployujeme Pharmacy?</td><td>K3s</td><td>Pharmacy is deployed using K3s. | Pharmacy is deployed on its own server. | Uživatel preferuje PostgreSQL.</td><td>1.000</td><td>396</td><td>exact_contains</td></tr>
+
+  </tbody>
+</table>
+</body>
+</html>

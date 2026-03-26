@@ -1,0 +1,4 @@
+id,dimension,memory_type,project_scope,setup_memory,query,expected_answer,scoring_method,notes
+TC-001,recall,preference,global,"Uživatel preferuje Tailwind před Bootstrapem","Jaký CSS framework mám rád?","Tailwind",exact_contains,Základní preference recall
+TC-002,recall,semantic,medicmee,"MedicMee používá Rails 7.1 s PostgreSQL a Hotwire","Jaký tech stack používá MedicMee?","Rails 7.1, PostgreSQL, Hotwire",llm_judge,Semantická paměť
+TC-004,isolation,preference,pharmacy,"Pharmacy: deploy přes K3s. MedicMee: deploy přes Dokku.","Jak deployujeme Pharmacy?","K3s",exact_contains,Izolace projektů

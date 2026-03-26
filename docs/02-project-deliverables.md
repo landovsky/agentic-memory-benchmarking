@@ -226,11 +226,11 @@ Each loader sends cleaned conversation messages via the system's native interfac
 
 ### TODO
 
-- [ ] Update `jsonl_parser.py` to strip tool_use blocks from assistant messages (currently keeps all content blocks). Output should be clean user/assistant dialogue only.
+- [x] Update `jsonl_parser.py` to strip tool_use blocks from assistant messages (currently keeps all content blocks). Output should be clean user/assistant dialogue only.
 - [ ] Rewrite `load_graphiti.py` to send conversation messages as `source="message"` episodes instead of pre-extracted facts.
 - [ ] Rewrite `load_cognee.py` to use `save_interaction()` for Q&A pairs instead of joining facts into text blobs.
-- [ ] Update `load_mem0.py` to send conversation messages with `infer=True` instead of pre-extracted facts.
-- [ ] Decide on message granularity: one message per API call vs. batching user+assistant pairs as a single episode.
+- [x] Update `load_mem0.py` to send conversation messages with `infer=True` instead of pre-extracted facts.
+- [x] Decide on message granularity: one message per API call vs. batching user+assistant pairs as a single episode.
 - [ ] Handle secrets — ensure `strip-claude-secrets.py` runs before ingestion (tool_result stripping helps, but user prompts can also contain secrets).
 
 ### Discrepancies & questions (ingestion)
