@@ -8,3 +8,4 @@ shared-data/eval-results/
 *.egg-info/
 dist/
 .venv/
+credentials/
