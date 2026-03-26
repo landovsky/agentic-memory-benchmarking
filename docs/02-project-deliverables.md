@@ -218,7 +218,15 @@ Each message (user prompt or assistant text response) is sent as-is to the memor
 
 Each loader sends cleaned conversation messages via the system's native interface:
 
-**Graphiti** — Feed each message as an episode with `source="message"`. Graphiti extracts entities, builds relationships, and handles temporal tracking internally.
+**Graphiti** (`data-loaders/load_graphiti.py`) — **Done.** Reads `--sessions` JSON (array of `{session_id, messages: [{role, content, timestamp}]}`). Flattens all messages, sends each as an episode via `graphiti.add_episode()` with `source=EpisodeType.message` and body formatted as `"role: content"` (the format Graphiti's message type expects). Uses `graphiti-core[openai]` with OpenAI-compatible clients routed through LiteLLM proxy — requires a monkey-patch (`_patch_openai_client_for_litellm`) because Graphiti v0.28 uses the OpenAI Responses API (`/v1/responses`) which LiteLLM doesn't support; the patch redirects structured completions to `chat.completions` with JSON mode. Each message becomes a separate episode with its original timestamp as `reference_time`, enabling Graphiti's temporal tracking. Graphiti extracts entities, builds relationships, and handles deduplication internally.
+
+```bash
+# Dry run (no infra needed)
+python3 data-loaders/load_graphiti.py --sessions shared-data/hotdesk_sessions.json --dry-run
+
+# Real run (needs Neo4j + LiteLLM proxy running)
+python3 data-loaders/load_graphiti.py --sessions shared-data/hotdesk_sessions.json --host <HOST_IP>
+```
 
 **Cognee** — Feed messages via `save_interaction()` (for user-agent Q&A pairs) or `cognify()` (for longer text). Cognee runs its full pipeline: chunking, entity extraction, graph construction.
 
@@ -227,7 +235,7 @@ Each loader sends cleaned conversation messages via the system's native interfac
 ### TODO
 
 - [x] Update `jsonl_parser.py` to strip tool_use blocks from assistant messages (currently keeps all content blocks). Output should be clean user/assistant dialogue only.
-- [ ] Rewrite `load_graphiti.py` to send conversation messages as `source="message"` episodes instead of pre-extracted facts.
+- [x] Rewrite `load_graphiti.py` to send conversation messages as `source="message"` episodes instead of pre-extracted facts.
 - [ ] Rewrite `load_cognee.py` to use `save_interaction()` for Q&A pairs instead of joining facts into text blobs.
 - [x] Update `load_mem0.py` to send conversation messages with `infer=True` instead of pre-extracted facts.
 - [x] Decide on message granularity: one message per API call vs. batching user+assistant pairs as a single episode.
@@ -242,7 +250,7 @@ Each loader sends cleaned conversation messages via the system's native interfac
 
 3. **`shared-data/test-data/` doesn't exist either.** The Testing section references `shared-data/test-data/facts_test.json` for loader commands, but this directory/file doesn't exist.
 
-4. **Loaders use direct API keys, not LiteLLM proxy.** `load_mem0.py` uses `ANTHROPIC_API_KEY` directly with the Anthropic SDK. `load_graphiti.py` uses `GOOGLE_API_KEY` directly. The graphiti-smoke variant (`~/agentic-memory-benchmarking-graphiti-smoke/`) already solves this — it uses `openai.OpenAI(base_url=litellm_url)` throughout. The main repo loaders need the same treatment.
+4. **Loaders use direct API keys, not LiteLLM proxy.** `load_mem0.py` uses `ANTHROPIC_API_KEY` directly with the Anthropic SDK. ~~`load_graphiti.py` uses `GOOGLE_API_KEY` directly.~~ `load_graphiti.py` is now fixed — uses OpenAI-compatible clients via LiteLLM proxy (ported from the graphiti-smoke variant). The remaining loaders need the same treatment.
 
 5. **Single-message vs. episode granularity.** Each message (user→LLM or LLM→user) is ingested as a separate document. This mimics how agentic platforms integrate — each turn triggers a memory write. However, Graphiti's `add_memory` with `source="message"` is designed for conversation episodes (multi-turn chunks). Feeding single messages may lose context that Graphiti is designed to exploit. **Open question for Timur:** does Graphiti's internal entity extraction work well on single messages, or does it need multi-turn context to build meaningful relationships?
 
