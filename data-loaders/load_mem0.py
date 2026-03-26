@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Load memory facts into Mem0.
+"""Load conversation sessions into Mem0.
+
+Sends whole messages to Mem0 with infer=True, letting Mem0's own LLM
+extract memories from the conversation.
 
 Usage:
-    python load_mem0.py --facts facts.json [--user-id hackathon] [--host localhost]
-    python load_mem0.py --facts facts.json --dry-run
+    python load_mem0.py --sessions sessions.json [--user-id hackathon] [--host localhost]
+    python load_mem0.py --sessions sessions.json --dry-run
 """
 
 import argparse
@@ -17,7 +20,6 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-MIN_CONFIDENCE = 0.5
 MODEL = "claude-3-5-haiku-20241022"
 
 
@@ -41,14 +43,29 @@ def build_config(qdrant_host: str) -> dict[str, Any]:
     }
 
 
+def flatten_messages(sessions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Flatten sessions into a list of messages, each tagged with session_id."""
+    messages: list[dict[str, Any]] = []
+    for session in sessions:
+        session_id = session.get("session_id", "unknown")
+        for msg in session.get("messages", []):
+            messages.append({
+                "role": msg.get("role", "user"),
+                "content": msg.get("content", ""),
+                "timestamp": msg.get("timestamp"),
+                "session_id": session_id,
+            })
+    return messages
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Load memory facts into Mem0.")
+    parser = argparse.ArgumentParser(description="Load conversation sessions into Mem0.")
     parser.add_argument(
-        "--facts",
+        "--sessions",
         type=Path,
         required=True,
-        metavar="facts.json",
-        help="JSON file produced by memory_extractor.py",
+        metavar="sessions.json",
+        help="JSON file produced by jsonl_parser.py",
     )
     parser.add_argument(
         "--user-id",
@@ -67,30 +84,27 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if not args.facts.is_file():
-        print(f"Error: {args.facts} does not exist", file=sys.stderr)
+    if not args.sessions.is_file():
+        print(f"Error: {args.sessions} does not exist", file=sys.stderr)
         sys.exit(1)
 
     qdrant_host = args.host or os.environ.get("QDRANT_HOST", "localhost")
 
-    facts: list[dict[str, Any]] = json.loads(args.facts.read_text(encoding="utf-8"))
-    print(f"Loaded {len(facts)} fact(s) from {args.facts}")
-
-    # Filter low-confidence facts
-    filtered = [f for f in facts if float(f.get("confidence", 1.0)) >= MIN_CONFIDENCE]
-    skipped = len(facts) - len(filtered)
-    if skipped:
-        print(f"Skipping {skipped} fact(s) with confidence < {MIN_CONFIDENCE}")
+    sessions: list[dict[str, Any]] = json.loads(
+        args.sessions.read_text(encoding="utf-8")
+    )
+    messages = flatten_messages(sessions)
+    print(f"Loaded {len(sessions)} session(s), {len(messages)} message(s) from {args.sessions}")
 
     if args.dry_run:
-        print(f"\n[DRY RUN] Would load {len(filtered)} fact(s) into Mem0")
+        print(f"\n[DRY RUN] Would send {len(messages)} message(s) to Mem0")
         print(f"  Qdrant host : {qdrant_host}:6333")
         print(f"  user_id     : {args.user_id}")
-        for i, fact in enumerate(filtered, start=1):
-            project = fact.get("project") or "global"
-            ftype = fact.get("type", "unknown")
-            conf = fact.get("confidence", "?")
-            print(f"  [{i:3d}] [{ftype}] [{project}] (conf={conf}) {fact.get('fact', '')[:80]}")
+        for i, msg in enumerate(messages, start=1):
+            role = msg["role"]
+            sid = msg["session_id"][:8]
+            content = msg["content"][:60]
+            print(f"  [{i:3d}] session:{sid} | {role:9s} | {content}")
         return
 
     api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -115,19 +129,18 @@ def main() -> None:
     successes = 0
     failures = 0
 
-    for i, fact in enumerate(filtered, start=1):
-        fact_text = fact.get("fact", "")
-        ftype = fact.get("type", "unknown")
-        project = fact.get("project") or "global"
-        conf = fact.get("confidence", "?")
+    for i, msg in enumerate(messages, start=1):
+        role = msg["role"]
+        content = msg["content"]
+        sid = msg["session_id"][:8]
 
-        print(f"[{i:3d}/{len(filtered)}] [{ftype}] [{project}] (conf={conf}) {fact_text[:80]}")
+        print(f"[{i:3d}/{len(messages)}] session:{sid} | {role:9s} | {content[:60]}")
 
         try:
             m.add(
-                [{"role": "user", "content": fact_text}],
+                [{"role": role, "content": content}],
                 user_id=args.user_id,
-                metadata={"type": ftype, "project": project},
+                metadata={"session_id": msg["session_id"]},
             )
             successes += 1
         except Exception as exc:

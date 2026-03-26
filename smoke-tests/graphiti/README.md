@@ -34,27 +34,25 @@ ln -sf ../../.env .env
 ```bash
 ./run.sh              # smoke suite (3 cases): load → eval → report
 ./run.sh --full       # full suite (10 cases)
-./run.sh --skip-load  # skip loading if facts are already in Neo4j
+./run.sh --skip-load  # skip loading if sessions are already in Neo4j
 ./run.sh --dry-run    # preview what would be loaded
 ```
 
 ## Running step by step
 
-### Step 1: Load facts into Graphiti
+### Step 1: Load sessions into Graphiti
 
 ```bash
 # Dry run — see what would be loaded
 python data-loaders/load_graphiti.py \
-  --facts shared-data/test-data/facts_test.json \
+  --sessions shared-data/test-data/sessions_test.json \
   --dry-run
 
-# Load for real (5 facts into Neo4j via LiteLLM proxy)
+# Load for real (sends whole messages to Neo4j, Graphiti extracts its own knowledge graph)
 python data-loaders/load_graphiti.py \
-  --facts shared-data/test-data/facts_test.json \
+  --sessions shared-data/test-data/sessions_test.json \
   --group-id hackathon
 ```
-
-The loader uses LiteLLM proxy (`LITELLM_URL`, default `http://localhost:4000`) to route LLM calls. It patches Graphiti's OpenAI client to work with LiteLLM (which doesn't support the OpenAI Responses API).
 
 ### Step 2: Run the eval harness
 
@@ -123,5 +121,5 @@ TC-002 scored 0.0 because Graphiti returned facts individually ("MedicMee uses P
 - `eval-harness/` - Fixed runner, scorers, report generator
 - `data-loaders/load_graphiti.py` - Graphiti loader with LiteLLM patch
 - `shared-data/test-cases/` - Smoke (3) and full (10) CSV test suites
-- `shared-data/test-data/` - Facts and session data used for loading
+- `shared-data/test-data/` - Test session data used for loading
 - `report.html` - Generated HTML report from the smoke run

@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
-"""Extract memory-worthy facts from conversations using Claude.
+"""DEPRECATED: This script is no longer part of the main data loading pipeline.
 
-Usage:
+The loaders (load_mem0.py, load_graphiti.py, load_cognee.py) now accept
+sessions.json directly and send whole messages to each memory system,
+letting each system do its own extraction/indexing.
+
+This script is kept for reference only.
+
+Original usage:
     python memory_extractor.py --input sessions.json --output facts.json
     python memory_extractor.py --session-file session.jsonl  # direct from JSONL
 """

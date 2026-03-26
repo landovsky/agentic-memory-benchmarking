@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Load memory facts into Graphiti.
+"""Load conversation sessions into Graphiti.
+
+Sends whole messages as episodes to Graphiti, letting it build its own
+knowledge graph (entity/relation extraction) from the conversation.
 
 Usage:
-    python load_graphiti.py --facts facts.json [--group-id hackathon] [--neo4j-host localhost]
-    python load_graphiti.py --facts facts.json --dry-run
+    python load_graphiti.py --sessions sessions.json [--group-id hackathon] [--neo4j-host localhost]
+    python load_graphiti.py --sessions sessions.json --dry-run
 """
 
 import argparse
@@ -32,8 +35,23 @@ def parse_timestamp(ts: str | None) -> datetime:
     return datetime.now(timezone.utc)
 
 
-async def load_facts(
-    facts: list[dict[str, Any]],
+def flatten_messages(sessions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Flatten sessions into a list of messages, each tagged with session_id."""
+    messages: list[dict[str, Any]] = []
+    for session in sessions:
+        session_id = session.get("session_id", "unknown")
+        for msg in session.get("messages", []):
+            messages.append({
+                "role": msg.get("role", "user"),
+                "content": msg.get("content", ""),
+                "timestamp": msg.get("timestamp"),
+                "session_id": session_id,
+            })
+    return messages
+
+
+async def load_messages(
+    messages: list[dict[str, Any]],
     group_id: str,
     neo4j_host: str,
     neo4j_password: str,
@@ -41,15 +59,14 @@ async def load_facts(
     dry_run: bool,
 ) -> tuple[int, int]:
     if dry_run:
-        print(f"\n[DRY RUN] Would load {len(facts)} fact(s) into Graphiti")
+        print(f"\n[DRY RUN] Would send {len(messages)} message(s) to Graphiti")
         print(f"  Neo4j host : bolt://{neo4j_host}:7687")
         print(f"  group_id   : {group_id}")
-        for i, fact in enumerate(facts, start=1):
-            ftype = fact.get("type", "unknown")
-            ts = fact.get("timestamp", "now")
-            print(
-                f"  [{i:3d}] [{ftype}] (ts={ts}) {fact.get('fact', '')[:80]}"
-            )
+        for i, msg in enumerate(messages, start=1):
+            role = msg["role"]
+            ts = msg.get("timestamp", "now")
+            sid = msg["session_id"][:8]
+            print(f"  [{i:3d}] session:{sid} | {role:9s} | {ts} | {msg['content'][:60]}")
         return 0, 0
 
     try:
@@ -96,22 +113,21 @@ async def load_facts(
     successes = 0
     failures = 0
 
-    for i, fact in enumerate(facts, start=1):
-        ftype = fact.get("type", "unknown")
-        fact_text = fact.get("fact", "")
-        ts = parse_timestamp(fact.get("timestamp"))
+    for i, msg in enumerate(messages, start=1):
+        role = msg["role"]
+        content = msg["content"]
+        ts = parse_timestamp(msg.get("timestamp"))
+        sid = msg["session_id"][:8]
 
-        episode_name = f"fact_{i:04d}_{ftype}"
-        print(
-            f"[{i:3d}/{len(facts)}] [{ftype}] {fact_text[:80]}"
-        )
+        episode_name = f"msg_{i:04d}_{role}"
+        print(f"[{i:3d}/{len(messages)}] session:{sid} | {role:9s} | {content[:60]}")
 
         try:
             await graphiti.add_episode(
                 name=episode_name,
-                episode_body=fact_text,
+                episode_body=f"{role}: {content}",
                 source=EpisodeType.text,
-                source_description=f"{ftype} memory from session",
+                source_description=f"{role} message from session {msg['session_id']}",
                 reference_time=ts,
                 group_id=group_id,
             )
@@ -120,7 +136,7 @@ async def load_facts(
             print(f"  ERROR: {exc}", file=sys.stderr)
             failures += 1
 
-        if i < len(facts):
+        if i < len(messages):
             await asyncio.sleep(EPISODE_SLEEP)
 
     await graphiti.close()
@@ -128,13 +144,13 @@ async def load_facts(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Load memory facts into Graphiti.")
+    parser = argparse.ArgumentParser(description="Load conversation sessions into Graphiti.")
     parser.add_argument(
-        "--facts",
+        "--sessions",
         type=Path,
         required=True,
-        metavar="facts.json",
-        help="JSON file produced by memory_extractor.py",
+        metavar="sessions.json",
+        help="JSON file produced by jsonl_parser.py",
     )
     parser.add_argument(
         "--group-id",
@@ -153,8 +169,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if not args.facts.is_file():
-        print(f"Error: {args.facts} does not exist", file=sys.stderr)
+    if not args.sessions.is_file():
+        print(f"Error: {args.sessions} does not exist", file=sys.stderr)
         sys.exit(1)
 
     neo4j_host = args.neo4j_host or os.environ.get("NEO4J_HOST", "localhost")
@@ -165,12 +181,15 @@ def main() -> None:
         print("Error: GOOGLE_API_KEY environment variable is not set.", file=sys.stderr)
         sys.exit(1)
 
-    facts: list[dict[str, Any]] = json.loads(args.facts.read_text(encoding="utf-8"))
-    print(f"Loaded {len(facts)} fact(s) from {args.facts}")
+    sessions: list[dict[str, Any]] = json.loads(
+        args.sessions.read_text(encoding="utf-8")
+    )
+    messages = flatten_messages(sessions)
+    print(f"Loaded {len(sessions)} session(s), {len(messages)} message(s) from {args.sessions}")
 
     successes, failures = asyncio.run(
-        load_facts(
-            facts=facts,
+        load_messages(
+            messages=messages,
             group_id=args.group_id,
             neo4j_host=neo4j_host,
             neo4j_password=neo4j_password,

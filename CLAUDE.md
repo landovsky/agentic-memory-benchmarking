@@ -56,11 +56,13 @@ python eval-harness/report.py --host <HOST_IP> --output report.html
 Run in order to populate memory systems from Claude Code session files:
 
 ```bash
+# Step 1: Parse JSONL session files into sessions.json
 python data-loaders/jsonl_parser.py --file session.jsonl --output sessions.json
-python data-loaders/memory_extractor.py --input sessions.json --output facts.json
-python data-loaders/load_mem0.py --facts facts.json --host <HOST_IP>
-python data-loaders/load_graphiti.py --facts facts.json --host <HOST_IP>
-python data-loaders/load_cognee.py --facts facts.json --host <HOST_IP>
+
+# Step 2: Load whole messages into each memory system (each system does its own extraction)
+python data-loaders/load_mem0.py --sessions sessions.json --host <HOST_IP>
+python data-loaders/load_graphiti.py --sessions sessions.json --host <HOST_IP>
+python data-loaders/load_cognee.py --sessions sessions.json --host <HOST_IP>
 ```
 
 ## Architecture
@@ -90,7 +92,7 @@ python data-loaders/load_cognee.py --facts facts.json --host <HOST_IP>
 
 ### Data Loading Flow
 
-`jsonl_parser.py` → structured conversation JSON → `memory_extractor.py` (Claude extracts facts with type: preference/episodic/semantic/goal + confidence) → system-specific loaders (`load_mem0.py`, `load_graphiti.py`, `load_cognee.py`)
+`jsonl_parser.py` → `sessions.json` (structured conversation messages) → system-specific loaders (`load_mem0.py`, `load_graphiti.py`, `load_cognee.py`). Each memory system receives whole messages and does its own extraction/indexing internally.
 
 ### Test Cases
 

@@ -1,0 +1,106 @@
+[
+  {
+    "session_id": "smoke-test-001",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Pro tento projekt chci používat Tailwind místo Bootstrapu. Tailwind mi vyhovuje víc.",
+        "timestamp": "2026-01-15T10:00:00Z"
+      },
+      {
+        "role": "assistant",
+        "content": "Dobře, budu používat Tailwind CSS pro stylování tohoto projektu.",
+        "timestamp": "2026-01-15T10:00:05Z"
+      },
+      {
+        "role": "user",
+        "content": "MedicMee běží na Rails 7.1 s PostgreSQL a Hotwire. Deployujeme přes Dokku na VPS.",
+        "timestamp": "2026-01-15T10:05:00Z"
+      },
+      {
+        "role": "assistant",
+        "content": "Rozumím - MedicMee tech stack je Rails 7.1, PostgreSQL databáze, Hotwire pro frontend interaktivitu, deployment přes Dokku.",
+        "timestamp": "2026-01-15T10:05:05Z"
+      },
+      {
+        "role": "user",
+        "content": "Pharmacy projekt deployujeme přes K3s, ne přes Dokku jako MedicMee.",
+        "timestamp": "2026-01-15T10:10:00Z"
+      },
+      {
+        "role": "assistant",
+        "content": "Jasně, Pharmacy používá K3s pro deployment, na rozdíl od MedicMee které používá Dokku.",
+        "timestamp": "2026-01-15T10:10:05Z"
+      }
+    ],
+    "message_count": 6,
+    "first_timestamp": "2026-01-15T10:00:00Z",
+    "last_timestamp": "2026-01-15T10:10:05Z"
+  },
+  {
+    "session_id": "smoke-test-002",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hřiště Hrou teď používá Bootstrap pro CSS.",
+        "timestamp": "2026-01-20T14:00:00Z"
+      },
+      {
+        "role": "assistant",
+        "content": "OK, Hřiště Hrou projekt používá Bootstrap.",
+        "timestamp": "2026-01-20T14:00:05Z"
+      },
+      {
+        "role": "user",
+        "content": "Cíl je vydat HH ERP systém do konce Q2.",
+        "timestamp": "2026-01-20T14:05:00Z"
+      },
+      {
+        "role": "assistant",
+        "content": "Rozumím, deadline pro HH ERP je konec Q2.",
+        "timestamp": "2026-01-20T14:05:05Z"
+      }
+    ],
+    "message_count": 4,
+    "first_timestamp": "2026-01-20T14:00:00Z",
+    "last_timestamp": "2026-01-20T14:05:05Z"
+  },
+  {
+    "session_id": "smoke-test-003",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Přešli jsme s Hřiště Hrou na Tailwind, Bootstrap už nepoužíváme.",
+        "timestamp": "2026-03-10T09:00:00Z"
+      },
+      {
+        "role": "assistant",
+        "content": "Dobře, Hřiště Hrou přešlo z Bootstrapu na Tailwind CSS.",
+        "timestamp": "2026-03-10T09:00:05Z"
+      },
+      {
+        "role": "user",
+        "content": "HH ERP nestíháme do Q2, posouvám deadline na Q3.",
+        "timestamp": "2026-03-10T09:05:00Z"
+      },
+      {
+        "role": "assistant",
+        "content": "Rozumím, deadline HH ERP se posunul z Q2 na Q3.",
+        "timestamp": "2026-03-10T09:05:05Z"
+      },
+      {
+        "role": "user",
+        "content": "3. března jsme řešili timeout PostgreSQL v MedicMee - opravili jsme to zvýšením pool size na 25.",
+        "timestamp": "2026-03-10T09:10:00Z"
+      },
+      {
+        "role": "assistant",
+        "content": "Zaznamenáno - PostgreSQL timeout v MedicMee vyřešen zvýšením connection pool size na 25.",
+        "timestamp": "2026-03-10T09:10:05Z"
+      }
+    ],
+    "message_count": 6,
+    "first_timestamp": "2026-03-10T09:00:00Z",
+    "last_timestamp": "2026-03-10T09:10:05Z"
+  }
+]

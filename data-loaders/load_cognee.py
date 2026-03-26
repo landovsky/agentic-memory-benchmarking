@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Load memory facts into Cognee.
+"""Load conversation sessions into Cognee.
+
+Sends whole conversation text to Cognee and lets cognify() build its own
+knowledge graph from the raw messages.
 
 Usage:
-    python load_cognee.py --facts facts.json [--dataset hackathon] [--host localhost]
-    python load_cognee.py --facts facts.json --dry-run
+    python load_cognee.py --sessions sessions.json [--dataset hackathon] [--host localhost]
+    python load_cognee.py --sessions sessions.json --dry-run
 """
 
 import argparse
@@ -11,7 +14,6 @@ import asyncio
 import json
 import os
 import sys
-from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -20,53 +22,30 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent / ".env")
 
 
-def group_facts_by_project(
-    facts: list[dict[str, Any]], base_dataset: str
-) -> dict[str, list[dict[str, Any]]]:
-    """Group facts by project, returning a dict of dataset_name -> facts list."""
-    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for fact in facts:
-        project = fact.get("project")
-        if project and project != "global":
-            # Sanitise project name for use as a dataset name
-            safe_project = project.lower().replace(" ", "_").replace("/", "_")
-            dataset_name = f"{base_dataset}_{safe_project}"
-        else:
-            dataset_name = base_dataset
-        groups[dataset_name].append(fact)
-    return dict(groups)
+def format_session_text(session: dict[str, Any]) -> str:
+    """Format a session's messages into a conversation transcript."""
+    lines: list[str] = []
+    for msg in session.get("messages", []):
+        role = msg.get("role", "unknown")
+        content = msg.get("content", "")
+        ts = msg.get("timestamp", "")
+        header = f"[{role}]" + (f" ({ts})" if ts else "")
+        lines.append(f"{header}\n{content}")
+    return "\n\n".join(lines)
 
 
-async def load_dataset(dataset_name: str, facts: list[dict[str, Any]]) -> None:
-    """Add and cognify a single dataset."""
-    import cognee  # type: ignore[import]
-
-    # Combine all facts into a single text blob
-    lines = [f["fact"] for f in facts if f.get("fact")]
-    text_blob = "\n".join(lines)
-
-    print(f"  Adding {len(facts)} fact(s) to dataset '{dataset_name}' ...")
-    await cognee.add(text_blob, dataset_name=dataset_name)
-
-    print(f"  Running cognify on dataset '{dataset_name}' (building knowledge graph) ...")
-    await cognee.cognify([dataset_name])
-    print(f"  Dataset '{dataset_name}' done.")
-
-
-async def run(
-    facts: list[dict[str, Any]],
+async def load_sessions(
+    sessions: list[dict[str, Any]],
     base_dataset: str,
     dry_run: bool,
 ) -> None:
-    groups = group_facts_by_project(facts, base_dataset)
-
     if dry_run:
-        print(f"\n[DRY RUN] Would create {len(groups)} dataset(s):")
-        for dataset_name, group_facts in groups.items():
-            print(f"  Dataset '{dataset_name}' <- {len(group_facts)} fact(s)")
-            for fact in group_facts:
-                ftype = fact.get("type", "unknown")
-                print(f"    [{ftype}] {fact.get('fact', '')[:80]}")
+        print(f"\n[DRY RUN] Would load {len(sessions)} session(s) into Cognee")
+        print(f"  dataset: {base_dataset}")
+        for i, session in enumerate(sessions, start=1):
+            sid = session.get("session_id", "unknown")[:8]
+            msg_count = session.get("message_count", len(session.get("messages", [])))
+            print(f"  [{i:3d}] session:{sid} | {msg_count} messages")
         return
 
     try:
@@ -75,25 +54,42 @@ async def run(
         print("Error: cognee is not installed. Run: pip install cognee", file=sys.stderr)
         sys.exit(1)
 
-    print(f"\nLoading {len(facts)} fact(s) into {len(groups)} Cognee dataset(s) ...")
+    print(f"\nLoading {len(sessions)} session(s) into Cognee dataset '{base_dataset}' ...")
 
-    for dataset_name, group_facts in groups.items():
+    for i, session in enumerate(sessions, start=1):
+        sid = session.get("session_id", "unknown")
+        msg_count = session.get("message_count", len(session.get("messages", [])))
+        text = format_session_text(session)
+
+        if not text.strip():
+            print(f"  [{i:3d}/{len(sessions)}] session:{sid[:8]} | skipped (empty)")
+            continue
+
+        print(f"  [{i:3d}/{len(sessions)}] session:{sid[:8]} | {msg_count} messages | adding ...")
         try:
-            await load_dataset(dataset_name, group_facts)
+            await cognee.add(text, dataset_name=base_dataset)
         except Exception as exc:
-            print(f"  ERROR on dataset '{dataset_name}': {exc}", file=sys.stderr)
+            print(f"    ERROR adding: {exc}", file=sys.stderr)
+            continue
 
-    print("\nAll datasets processed.")
+    print(f"\n  Running cognify on dataset '{base_dataset}' (building knowledge graph) ...")
+    try:
+        await cognee.cognify([base_dataset])
+    except Exception as exc:
+        print(f"  ERROR cognifying: {exc}", file=sys.stderr)
+        return
+
+    print(f"  Dataset '{base_dataset}' done.")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Load memory facts into Cognee.")
+    parser = argparse.ArgumentParser(description="Load conversation sessions into Cognee.")
     parser.add_argument(
-        "--facts",
+        "--sessions",
         type=Path,
         required=True,
-        metavar="facts.json",
-        help="JSON file produced by memory_extractor.py",
+        metavar="sessions.json",
+        help="JSON file produced by jsonl_parser.py",
     )
     parser.add_argument(
         "--dataset",
@@ -112,8 +108,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if not args.facts.is_file():
-        print(f"Error: {args.facts} does not exist", file=sys.stderr)
+    if not args.sessions.is_file():
+        print(f"Error: {args.sessions} does not exist", file=sys.stderr)
         sys.exit(1)
 
     anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -138,10 +134,12 @@ def main() -> None:
     if cognee_host != "localhost":
         os.environ["COGNEE_HOST"] = cognee_host
 
-    facts: list[dict[str, Any]] = json.loads(args.facts.read_text(encoding="utf-8"))
-    print(f"Loaded {len(facts)} fact(s) from {args.facts}")
+    sessions: list[dict[str, Any]] = json.loads(
+        args.sessions.read_text(encoding="utf-8")
+    )
+    print(f"Loaded {len(sessions)} session(s) from {args.sessions}")
 
-    asyncio.run(run(facts=facts, base_dataset=args.dataset, dry_run=args.dry_run))
+    asyncio.run(load_sessions(sessions=sessions, base_dataset=args.dataset, dry_run=args.dry_run))
 
 
 if __name__ == "__main__":
