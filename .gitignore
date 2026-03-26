@@ -10,3 +10,5 @@ dist/
 .venv/
 credentials/
 .idea/
+tmp/*
+docs/superpowers/*

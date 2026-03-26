@@ -11,35 +11,21 @@
 
 ### 1. Load test data
 
-Load facts into the memory system you want to evaluate. Only needed once per system (or after wiping its storage).
+Load historical conversation data into the memory system you want to evaluate. Only needed once per system (or after wiping its storage). See the **Ingestion** section below for the full pipeline.
 
-```bash
-# Graphiti (Neo4j)
-python data-loaders/load_graphiti.py --facts shared-data/test-data/facts_test.json --group-id hackathon
-
-# Mem0 (Qdrant)
-python data-loaders/load_mem0.py --facts shared-data/test-data/facts_test.json --host localhost
-
-# Dry run (any loader) — shows what would be loaded without writing
-python data-loaders/load_graphiti.py --facts shared-data/test-data/facts_test.json --dry-run
-```
+> **Note:** The loader commands below still reference the old `--facts` interface. They will be rewritten to accept stripped conversation messages (strip-and-feed approach) instead of pre-extracted facts. See Ingestion TODOs.
 
 ### 2. Run the eval harness
 
 ```bash
-# Single system — smoke tests (3 cases, fast)
-python eval-harness/runner.py --system graphiti \
-  --test-cases shared-data/test-cases/test_cases_smoke.csv \
-  --runner-name <your-name>
-
-# Single system — full suite (10 cases)
-python eval-harness/runner.py --system graphiti \
-  --test-cases shared-data/test-cases/test_cases.csv \
-  --runner-name <your-name>
+# Single system
+python eval-harness/runner.py --system graphiti --runner-name <your-name>
 
 # All systems sequentially
 python eval-harness/runner.py --system all --runner-name <your-name>
 ```
+
+> **Note:** Once the runner is updated to fetch from Google Sheets, no `--test-cases` argument is needed. The URL is configured as a constant/env var.
 
 Each test case is queried against the memory system, scored, and saved to PostgreSQL. Terminal output shows per-case scores and a summary table with averages.
 
@@ -74,10 +60,46 @@ Defined per test case in the CSV `scoring_method` column:
 
 ### Test case files
 
-| File | Cases | Purpose |
-|------|-------|---------|
-| `shared-data/test-cases/test_cases_smoke.csv` | 3 | Quick validation — recall + isolation |
-| `shared-data/test-cases/test_cases.csv` | 10 | Full suite — recall, temporal, isolation, hallucination, proactive, scale, type distinction |
+| File | Source | Purpose |
+|------|--------|---------|
+| Google Sheets published CSV | Dynamic, team-editable | Source of truth — fetched at runtime by runner |
+| `shared-data/test-cases/test_cases.csv` | Local snapshot (to be replaced by fetch) | Currently 19 cases — recall, temporal, isolation, hallucination, proactive, scale, type distinction |
+| `shared-data/test-cases/test_cases_smoke.csv` | **MISSING** | Was planned for quick validation — does not exist |
+
+### Discrepancies & questions (testing)
+
+1. **CSV should be fetched dynamically from Google Sheets.** The test cases are maintained as a published Google Sheet CSV. The runner should fetch from a URL (constant at top of file or env var with default), not read a local file. The local `test_cases.csv` and `test_cases.json` files should be removed or treated as cache only.
+
+2. **Results must snapshot the test case at eval time.** Since the remote CSV can change between runs, the `eval_runs` table must store the full test case data (query, expected_answer, dimension, scoring_method, etc.) alongside the result. Currently results reference a `test_case_id` that may point to different content across runs. Without snapshotting, historical results become uninterpretable.
+
+3. **`test_cases_smoke.csv` doesn't exist.** Doc references it but the file was never created.
+
+4. **BUG: `expected` vs `expected_answer` column name in main repo runner.** `runner.py:262` reads `row.get("expected", "")` but the CSV column is `expected_answer`. This means the runner passes empty strings to scorers. The graphiti-smoke variant already fixed this — it reads `row.get("expected_answer", "")` at line 314. **Must be fixed.**
+
+5. **BUG: Scoring method names don't match between CSV and main repo scorer.** The CSV uses `exact_contains`, `llm_judge`, `llm_judge_negation`. But `scorers.py` in the main repo dispatches on `"exact"`, `"llm"`, `"negation"`. Any CSV test case hits `raise ValueError(f"Unknown scoring method: ...")`. The graphiti-smoke variant's `scorers.py` already uses the full names (`exact_contains`, `llm_judge`, `llm_judge_negation`). **Must be ported.**
+
+6. **BUG: Scoring method check for client is also wrong.** `runner.py:284` checks `scoring_method in ("llm", "negation")` to decide whether to pass the LLM client. With CSV values being `llm_judge` / `llm_judge_negation`, the client is never passed → scorer raises ValueError. Graphiti-smoke variant checks `("llm_judge", "llm_judge_negation")`. **Must be fixed.**
+
+7. **Main repo scorer uses Anthropic SDK directly, not LiteLLM.** `scorers.py` calls `client.messages.create()` (Anthropic native). The graphiti-smoke variant uses `client.chat.completions.create()` (OpenAI-compatible / LiteLLM). Per the LiteLLM-only strategy, the main repo scorer should be ported to use OpenAI-compatible client via LiteLLM.
+
+8. **DB user mismatch.** Main repo `runner.py:45` connects as `user="postgres"`, graphiti-smoke uses `user="hackathon"`. CLAUDE.md says credentials are `hackathon / hackathon2025`.
+
+9. **Dimension coverage is unbalanced.** 11/19 cases are `recall`, 1 each for temporal, isolation, hallucination, proactive, scale, type_distinction. The CSV should be extended with more non-recall cases. Consider adding a `dimension` (or `test_type`) column to the Google Sheet to make this visible to team members adding test cases.
+
+10. **`setup_memory` column is descriptive, not actionable.** The runner ignores it. Scale tests (TC-008 "100 memories", TC-009 "1000 memories") require different DB states but run in the same CSV pass. No mechanism ensures the right state. This is acceptable if scale tests are run manually, but should be documented.
+
+11. **Mixed languages (Czech/English) in test cases.** TC-001–010 are Czech; TC-011–019 have Czech `setup_memory` but English queries/answers. Fine if intentional, but undocumented.
+
+### TODO (testing)
+
+- [ ] Fetch test cases from Google Sheets published CSV URL (constant/env var with default).
+- [ ] Store full test case snapshot in `eval_runs` (or a linked `eval_test_case_snapshots` table).
+- [ ] Fix `runner.py`: read `expected_answer` not `expected`.
+- [ ] Port `scorers.py` to use OpenAI-compatible client (LiteLLM proxy) instead of Anthropic SDK.
+- [ ] Fix scoring method names in `scorers.py` dispatcher to match CSV values (`exact_contains`, `llm_judge`, `llm_judge_negation`).
+- [ ] Fix client-passing logic in runner to match the full method names.
+- [ ] Fix DB user to `hackathon` (not `postgres`).
+- [ ] Extend Google Sheet with more non-recall test cases (temporal, hallucination, proactive, etc.).
 
 ## Agentic system memory integration
 
@@ -211,6 +233,21 @@ Each loader sends cleaned conversation messages via the system's native interfac
 - [ ] Decide on message granularity: one message per API call vs. batching user+assistant pairs as a single episode.
 - [ ] Handle secrets — ensure `strip-claude-secrets.py` runs before ingestion (tool_result stripping helps, but user prompts can also contain secrets).
 
+### Discrepancies & questions (ingestion)
+
+1. **Code still does "extract-and-feed", not "strip-and-feed".** The pipeline overview describes sending raw messages to memory systems (letting them extract facts internally), but the actual code runs the old pipeline: `jsonl_parser.py` → `memory_extractor.py` (LLM-based fact extraction) → loaders consume `facts.json`. All three loaders (`load_mem0.py`, `load_graphiti.py`, `load_cognee.py`) accept `--facts facts.json` and iterate over pre-extracted fact objects. They need to be rewritten to accept cleaned conversation messages instead.
+   - `memory_extractor.py` should be removed or marked as deprecated — it contradicts the strip-and-feed approach where memory systems do their own extraction.
+
+2. **`shared-data/test-sessions/` doesn't exist.** Doc references it as the canonical location for stripped sessions, but the directory was never created. No sample data exists there.
+
+3. **`shared-data/test-data/` doesn't exist either.** The Testing section references `shared-data/test-data/facts_test.json` for loader commands, but this directory/file doesn't exist.
+
+4. **Loaders use direct API keys, not LiteLLM proxy.** `load_mem0.py` uses `ANTHROPIC_API_KEY` directly with the Anthropic SDK. `load_graphiti.py` uses `GOOGLE_API_KEY` directly. The graphiti-smoke variant (`~/agentic-memory-benchmarking-graphiti-smoke/`) already solves this — it uses `openai.OpenAI(base_url=litellm_url)` throughout. The main repo loaders need the same treatment.
+
+5. **Single-message vs. episode granularity.** Each message (user→LLM or LLM→user) is ingested as a separate document. This mimics how agentic platforms integrate — each turn triggers a memory write. However, Graphiti's `add_memory` with `source="message"` is designed for conversation episodes (multi-turn chunks). Feeding single messages may lose context that Graphiti is designed to exploit. **Open question for Timur:** does Graphiti's internal entity extraction work well on single messages, or does it need multi-turn context to build meaningful relationships?
+
+6. **Cognee loader uses `cognee.add()` + `cognee.cognify()`, not `save_interaction()`.** The doc says to use `save_interaction()` for Q&A pairs, but the current code joins all facts into a text blob. This needs rewriting to align with single-message ingestion.
+
 ---
 
 ## Golden dataset
@@ -262,3 +299,22 @@ The output format matches the existing `test_cases.json` schema: `{id, dimension
 - [ ] Have Claude generate test cases from approved topics.
 - [ ] Human review and finalize the golden dataset.
 - [ ] Replace or extend `shared-data/test-cases/test_cases.json` with the curated dataset.
+
+### Discrepancies & questions (golden dataset)
+
+1. **Golden dataset section describes a future process, but TC-011–019 already exist.** The golden dataset TODO says "pick a project, strip sessions, generate test cases" — but 9 golden-set cases are already in the CSV/JSON. Were these produced through this process or manually? If manually, the curation process diagram is aspirational, not descriptive.
+
+2. **No source session references on golden cases.** The curation process says to include "source session reference" but TC-011–019 have no session reference. This makes it impossible to trace back which conversation the expected answer came from.
+
+3. **Golden dataset vs. test_cases — same file or separate?** The doc says "Replace or extend `test_cases.json`" but it's unclear whether the golden dataset is the same artifact as the test cases or a superset. Currently they're merged into one file.
+
+---
+
+## Integration (Agentic / MCP)
+
+### TODO (integration — future work)
+
+- [ ] **Agent-in-the-loop eval path.** Current eval queries memory SDKs directly. For proactive dimension testing (TC-006), need an LLM agent loop: user query → LLM → LLM decides to call memory tool → memory result → LLM synthesizes answer → scorer. Without this, proactive test cases can't be meaningfully scored.
+- [ ] **MCP integration tests.** MCP tool interfaces are documented in detail above but the eval harness bypasses MCP entirely. Add a test path that exercises the actual MCP endpoints.
+- [ ] **End-to-end `save_interaction()` test for Cognee.** The doc says it's the conversation-native method, but no code path exercises it.
+- [ ] **Measure integration quality, not just retrieval quality.** Current eval measures whether the memory system returns the right data. A fuller benchmark would measure whether an LLM agent uses memory tools effectively (retrieval + synthesis + proactive invocation).
