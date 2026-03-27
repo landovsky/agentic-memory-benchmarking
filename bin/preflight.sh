@@ -1,10 +1,12 @@
 #!/bin/bash
-# preflight.sh — Run from the host machine after docker compose up -d
-# Checks that all services are up and reachable
+# bin/preflight.sh — Health-check all Docker services after docker compose up -d
+#
+# Verifies that PostgreSQL, Qdrant, Neo4j, Mem0 MCP, Graphiti MCP, Cognee MCP,
+# and the shared file server are all reachable and responding correctly.
 #
 # Usage:
-#   bash preflight.sh              # check localhost
-#   bash preflight.sh 192.168.1.X  # check a remote host
+#   bash bin/preflight.sh              # check localhost
+#   bash bin/preflight.sh 192.168.1.X  # check a remote host
 
 HOST="${1:-localhost}"
 PASS=0

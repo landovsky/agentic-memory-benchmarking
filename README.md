@@ -81,14 +81,21 @@ cp .env.example .env
 ### 3. Nakonfiguruj MCP servery
 
 ```bash
-chmod +x setup-mcp.sh
-./setup-mcp.sh 192.168.x.x   # IP hostu od Tomáše
-```
+# Pouze Graphiti (výchozí)
+bash bin/setup-mcp.sh 192.168.x.x
 
-Nebo bez argumentu — skript se zeptá:
+# Všechny tři systémy (Graphiti + Mem0 + Cognee)
+bash bin/setup-mcp.sh --all 192.168.x.x
 
-```bash
-./setup-mcp.sh
+# Bez argumentu — skript se zeptá
+bash bin/setup-mcp.sh
+
+# Globálně (user scope místo project)
+bash bin/setup-mcp.sh --scope user 192.168.x.x
+
+# Odebrání MCP serverů
+bash bin/setup-mcp.sh --remove
+bash bin/setup-mcp.sh --all --remove
 ```
 
 ### 4. Ověř připojení
@@ -251,7 +258,10 @@ agentic-memory-benchmarking/
 │   └── cognee.mcp.json
 ├── presentation/
 │   └── findings.md              # šablona pro výsledky
-├── setup-mcp.sh                 # konfigurace MCP na participant stroji
+├── bin/
+│   ├── setup-mcp.sh             # konfigurace MCP na participant stroji
+│   ├── preflight.sh             # health check všech služeb
+│   └── setup-credentials.sh    # zapíše GCP SA JSON do credentials/
 ├── .env.example                 # template pro .env
 └── README.md                    # tento soubor
 ```
@@ -305,7 +315,7 @@ nc -zv <HOST_IP> 8000
 ### `claude mcp list` neukazuje servery
 ```bash
 # Znovu spusť setup skript
-./setup-mcp.sh <HOST_IP>
+bash bin/setup-mcp.sh <HOST_IP>
 
 # Nebo přidej manuálně
 claude mcp add --transport sse mem0 "http://<HOST_IP>:8080/sse"

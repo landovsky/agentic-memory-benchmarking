@@ -28,13 +28,14 @@ docker compose up -d          # Start all services
 docker compose ps             # Check health
 docker compose down           # Stop (keep data)
 docker compose down -v        # Stop + wipe volumes
-bash preflight.sh             # Run health checks
+bash bin/preflight.sh         # Run health checks
 ```
 
 ## MCP Setup (Participant Machines)
 
 ```bash
-bash setup-mcp.sh 192.168.x.x   # Register all 3 MCP servers in Claude Code
+bash bin/setup-mcp.sh 192.168.x.x        # Graphiti only (default)
+bash bin/setup-mcp.sh --all 192.168.x.x # All 3 MCP servers
 claude mcp list                  # Verify
 ```
 
